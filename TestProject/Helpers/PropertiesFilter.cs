@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Serialization;
 
 namespace TestProject.Helpers
 {
@@ -139,6 +140,72 @@ namespace TestProject.Helpers
             return lambda;
         }
 
+        private static LambdaExpression GetObjectFields(Type parameterType, HashSet<string> propertiesNames, string trash)
+        {
+            var propertyInfos = GetObjectProperties(parameterType);
+
+            var numberOfProperties = propertyInfos.Length;
+            var expressionBlockStatements = new List<Expression>(numberOfProperties);
+
+            var listConstructor = Expression.New(typeof(List<>).GetConstructor(new Type[0]));
+            var listVariable = Expression.Parameter(typeof(List<>), "listParam");
+            var listAssigment = Expression.Assign(listVariable, listConstructor);
+
+            //var foreachLoop = Expression.Loop();
+
+            var dictionaryConstructorCapacity = Expression.Constant(numberOfProperties, TypeOfInt);
+            var dictionaryConstructor = Expression.New(DictionaryConstructorInfo, dictionaryConstructorCapacity);
+            var dictionaryVariable = Expression.Parameter(TypeOfDictionary, "fieldsDictionary");
+            var dictionaryAssigment = Expression.Assign(dictionaryVariable, dictionaryConstructor);
+
+            var parameter = Expression.Parameter(TypeOfObject, "obj");
+
+            var castedParameterVariable = Expression.Parameter(parameterType, "castedObj");
+            var castedParameter = Expression.TypeAs(parameter, parameterType);
+            var castAssigment = Expression.Assign(castedParameterVariable, castedParameter);
+
+            var returnTarget = Expression.Label(TypeOfDictionary, "returnLabel");
+            var returnExpression = Expression.Label(returnTarget, dictionaryVariable);
+            var returnStatement = Expression.Return(returnTarget, dictionaryVariable, TypeOfDictionary);
+
+            var nullConstant = Expression.Constant(null);
+
+            var ifCastedsuccessfullyAddToDictionaryElseGoToReturn = Expression.IfThen(Expression.Equal(castedParameterVariable, nullConstant),
+                returnStatement);
+
+            expressionBlockStatements.Add(dictionaryVariable);
+            expressionBlockStatements.Add(dictionaryAssigment);
+            expressionBlockStatements.Add(castedParameterVariable);
+            expressionBlockStatements.Add(castAssigment);
+            expressionBlockStatements.Add(ifCastedsuccessfullyAddToDictionaryElseGoToReturn);
+
+            foreach (var propertyInfo in propertyInfos.Where(pi => propertiesNames.Contains(pi.Name)))
+            {
+                var propertyGetterInfo = propertyInfo.GetGetMethod(false);
+                if (propertyGetterInfo != null && propertyGetterInfo.GetParameters().Length == 0)
+                {
+                    var propertyName = propertyInfo.Name;
+                    var propertyNameConstant = Expression.Constant(propertyName);
+                    var getterCall = Expression.Call(castedParameterVariable, propertyGetterInfo);
+                    var convertGetterValueToObject = Expression.Convert(getterCall, TypeOfObject);
+                    var addToDictionary = Expression.Call(dictionaryVariable, DictionaryAddMethodInfo,
+                        propertyNameConstant, convertGetterValueToObject);
+
+                    expressionBlockStatements.Add(addToDictionary);
+                }
+            }
+
+            expressionBlockStatements.Add(returnStatement);
+            expressionBlockStatements.Add(returnExpression);
+
+            var expressionBlock = Expression.Block(TypeOfDictionary, new[] { dictionaryVariable, castedParameterVariable },
+                expressionBlockStatements);
+
+            var lambda = Expression.Lambda(expressionBlock, parameter);
+
+            return lambda;
+        }
+
         private static PropertyInfo[] GetObjectProperties(Type objectType)
         {
             return objectType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
@@ -184,6 +251,9 @@ namespace TestProject.Helpers
             TypeOfObject = typeof(object);
             TypeOfDictionary = typeof(Dictionary<string, object>);
 
+            //TypeOfEnumerableWrapper = typeof(EnumerableWrapper<SingleObjectWrapper<>>);
+            //EnumerableWrapperConstructor;
+
             DictionaryConstructorInfo = TypeOfDictionary.GetConstructor(new[] { TypeOfInt });
             DictionaryAddMethodInfo = TypeOfDictionary.GetMethod("Add", new[] { TypeOfString, TypeOfObject });
         }
@@ -216,40 +286,181 @@ namespace TestProject.Helpers
         #endregion
     }
 
-    #region TODO
-
-    // TODO
-    // make changes to expression tree create to return below type
-    // expression tree should create one delegate for return type of object
-    // it will be !!!fantastic!!! if class ReturnWrapper will have actual return type as T
-    public class ReturnWrapper<T>
+    public abstract class Wrapper<T> : IWrapper<T>
     {
-        // todo: class should wrap any object
-        // it should contain properties such as WrappedType, 
-    }
+        protected Type WrappedType;
+        protected T WrappedObject;
 
-    public class ObjectWrapper<T> : ReturnWrapper<T>
-    {
-        // todo: class should wrap dictionary with properties for one object
-        // it should contain properties such as WrappedType, Indexer, ImplementedProperties
-    }
-
-    public class EnumerableWrapper<T> : ReturnWrapper<T>, IEnumerable<T>
-    {
-        // todo: class should wrap list of dictionary with properties of real object as type of ObjectWrapper
-        // it should contain properties such as WrappedType, UnderlyingObjectsType, Indexer
-
-
-        public IEnumerator<T> GetEnumerator()
+        public Wrapper(T instance)
         {
-            throw new NotImplementedException();
+            WrappedType = typeof(T);
+            WrappedObject = instance;
+
+            disposable = instance as IDisposable;
+            if(disposable == null)
+            {
+                GC.SuppressFinalize(this);
+            }
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        #region IWrapper implementation
+
+        public virtual TReturn Call<TReturn>(Func<T, TReturn> expression)
         {
-            throw new NotImplementedException();
+            if (isDisposed)
+                throw new ObjectDisposedException("Instance");
+            return expression(WrappedObject);
+        }
+
+        public virtual void Call(Action<T> expression)
+        {
+            if (isDisposed)
+                throw new ObjectDisposedException("Instance");
+            expression(WrappedObject);
+        }
+
+        public virtual T Instance
+        {
+            get
+            {
+                if (isDisposed)
+                    throw new ObjectDisposedException("Instance");
+                return WrappedObject;
+            }
+        }
+
+        public virtual Type InstanceType
+        {
+            get
+            {
+                if (isDisposed)
+                    throw new ObjectDisposedException("Instance");
+                return WrappedType;
+            }
+        }
+
+        #endregion
+
+        #region IDisposable
+
+        public void Dispose()
+        {
+            if (!isDisposed)
+            {
+                Dispose(true);
+            }
+        }
+
+        protected bool isDisposed;
+
+        private IDisposable disposable;
+        protected IDisposable Disposable
+        {
+            get { return disposable; }
+        }
+
+        protected virtual void Dispose(bool isDisposing)
+        {
+            if (Disposable != null)
+            {
+                Disposable.Dispose();
+                WrappedObject = default(T);
+                WrappedType = null;
+
+                isDisposed = true;
+            }
+        }
+
+        #endregion
+
+        #region Finalizer
+
+        ~Wrapper()
+        {
+            Dispose(false);
+        }
+
+        #endregion
+    }
+
+    public class SerializationFilterWrapper<T> : Wrapper<T>, ISerializable
+    {
+        private readonly HashSet<string> ImplementedProperties;
+        private Action<SerializationInfo> fillSerializationInfo;
+
+        public SerializationFilterWrapper(T wrappedInstance, HashSet<string> propertiesNames) : base(wrappedInstance)
+        {
+            ImplementedProperties = propertiesNames;
+            Initialize();
+        }
+
+        protected void Initialize()
+        {
+            InitializeMembers();
+            var lambdaExpression = BuildExpressionTree();
+            CompileDelegate(lambdaExpression);
+        }
+
+        public HashSet<string> GetImplementedProperties()
+        {
+            return ImplementedProperties;
+        }
+
+        public void GetObjectData(SerializationInfo info, StreamingContext context)
+        {
+            FillSerializationInfo(info);
+        }
+
+        protected void FillSerializationInfo(SerializationInfo info)
+        {
+            if (fillSerializationInfo != null && info != null)
+            {
+                fillSerializationInfo(info);
+            }
+        }
+
+        protected LambdaExpression BuildExpressionTree()
+        {
+            return null;
+        }
+
+        protected void InitializeMembers()
+        {
+
+        }
+
+        protected void CompileDelegate(LambdaExpression expression)
+        {
+            fillSerializationInfo = (Action<SerializationInfo>)expression.Compile();
+        }
+
+        protected class BriefPropertyInfo
+        {
+            public string PropertyName { get; set; }
+            public Type PropertyType { get; set; }
+            public object PropertyValue { get; set; }
+
+            public BriefPropertyInfo(string propertyName, object propertyValue, Type propertyType)
+            {
+                PropertyName = propertyName;
+                PropertyValue = PropertyValue;
+                PropertyType = propertyType;
+            }
         }
     }
 
-    #endregion
+    //public class EnumerableWrapper<T, TUnderl> : Wrapper<T>
+    //{
+    //    protected readonly Type UnderlyingType;
+
+    //    public EnumerableWrapper(Type underlyingType, IEnumerable<SingleObjectWrapper<TUnderl>> wrappedObject) : base(wrappedObject)
+    //    {
+    //        UnderlyingType = typeof(TUnderl);
+    //    }
+
+    //    public Type GetUnderlyingType()
+    //    {
+    //        return UnderlyingType;
+    //    }
+    //}
 }

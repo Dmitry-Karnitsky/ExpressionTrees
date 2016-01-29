@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Web.Http;
+using TestProject.Helpers;
 using TestProject.Models;
 
 namespace TestProject.Controllers
@@ -14,16 +15,26 @@ namespace TestProject.Controllers
         //    return ret;
         //}
 
-        [FilterFields]
+        //[FilterFields]
+        //[HttpGet]
+        //public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
+        //{
+        //    var newList = new List<ObjectWithManyProperties>();
+
+        //    typeof(IEnumerable<ObjectWithNotSoManyProperties>).IsAssignableFrom(newList.GetType());
+
+        //    var list = new List<ObjectWithManyProperties>();
+        //    for (var i = 0; i < 3; i++)
+        //    {
+        //        list.Add(BuildObject());
+        //    }
+        //    return list;
+        //}
+
         [HttpGet]
-        public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
+        public Wrapper<Dictionary<string, object>> Wrapper()
         {
-            var list = new List<ObjectWithManyProperties>();
-            for (var i = 0; i < 3; i++)
-            {
-                list.Add(BuildObject());
-            }
-            return list;
+            return new Wrapper<Dictionary<string, object>>();
         }
 
         // GET api/values/5
