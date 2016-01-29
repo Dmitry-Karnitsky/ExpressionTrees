@@ -1,15 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace TestProject.Helpers
 {
-    public interface IWrapper<TWrapped> : IDisposable
+    public interface IWrapper : IDisposable
     {
-        TReturn Call<TReturn>(Func<TWrapped, TReturn> expression);
-        void Call(Action<TWrapped> expression);
-        TWrapped Instance { get; }
+        TReturn Call<TReturn>(Func<object, TReturn> expression);
+        void Call(Action<object> expression);
+        object Instance { get; }
     }
 }

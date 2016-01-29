@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.Serialization;
+using WebGrease.Css.Ast.MediaQuery;
 
 namespace TestProject.Helpers
 {
@@ -12,13 +13,15 @@ namespace TestProject.Helpers
     {
         public static void PrepareDelegate(Type objectType, HashSet<string> propertiesNames)
         {
-            var argumentType = GetRealType(objectType);
-            GetCompiledLambda(argumentType, propertiesNames);
+            //var ins = new SerializationFilterWrapper(instance, instanceType, propertiesNames);
+            //var argumentType = GetRealType(objectType);
+            //GetCompiledLambda(argumentType, propertiesNames);
         }
 
         public static object FilterFields(this object instance, Type instanceType, HashSet<string> propertiesNames)
         {
-            return GetFilteredObject(instance, instanceType, propertiesNames);
+            return new SerializationFilterWrapper(instance, instanceType, propertiesNames);
+                //GetFilteredObject(instance, instanceType, propertiesNames);
         }
 
         private static object GetFilteredObject(object instance, Type instanceType, HashSet<string> propertiesNames)
@@ -280,14 +283,14 @@ namespace TestProject.Helpers
         #endregion
     }
 
-    public class Wrapper<T> : IWrapper<T>
+    public class Wrapper : IWrapper
     {
         protected Type WrappedType;
-        protected T WrappedObject;
+        protected object WrappedObject;
 
-        public Wrapper(T instance)
+        public Wrapper(object instance, Type wrappedType)
         {
-            WrappedType = typeof(T);
+            WrappedType = wrappedType;
             WrappedObject = instance;
 
             _disposable = instance as IDisposable;
@@ -299,21 +302,21 @@ namespace TestProject.Helpers
 
         #region IWrapper implementation
 
-        public virtual TReturn Call<TReturn>(Func<T, TReturn> expression)
+        public virtual TReturn Call<TReturn>(Func<object, TReturn> expression)
         {
             if (IsDisposed)
                 throw new ObjectDisposedException("Instance");
             return expression(WrappedObject);
         }
 
-        public virtual void Call(Action<T> expression)
+        public virtual void Call(Action<object> expression)
         {
             if (IsDisposed)
                 throw new ObjectDisposedException("Instance");
             expression(WrappedObject);
         }
 
-        public virtual T Instance
+        public virtual object Instance
         {
             get
             {
@@ -358,7 +361,7 @@ namespace TestProject.Helpers
             if (Disposable != null)
             {
                 Disposable.Dispose();
-                WrappedObject = default(T);
+                WrappedObject = null;
                 WrappedType = null;
 
                 IsDisposed = true;
@@ -377,21 +380,21 @@ namespace TestProject.Helpers
         #endregion
     }
 
-    public class SerializationFilterWrapper<T> : Wrapper<T>, ISerializable
+    public class SerializationFilterWrapper : Wrapper, ISerializable
     {
         private readonly HashSet<string> _implementedProperties;
-        private Action<SerializationInfo> _fillSerializationInfo;
+        private Action<SerializationInfo, object> _fillSerializationInfo;
         private bool _isFilterUnderlyingObjectIfEnumerable;
         private bool _isIEnumerableWrapped;
         private Type _underlyingObjectType;
 
-        public SerializationFilterWrapper(T wrappedInstance, HashSet<string> propertiesNames)
-            : this(wrappedInstance, propertiesNames, true)
+        public SerializationFilterWrapper(object wrappedInstance, Type wrappedType, HashSet<string> propertiesNames)
+            : this(wrappedInstance, wrappedType, propertiesNames, true)
         {
         }
 
-        public SerializationFilterWrapper(T wrappedInstance, HashSet<string> propertiesNames, bool isFilterUnderlyingObjectIfEnumerable)
-            : base(wrappedInstance)
+        public SerializationFilterWrapper(object wrappedInstance, Type wrappedType, HashSet<string> propertiesNames, bool isFilterUnderlyingObjectIfEnumerable)
+            : base(wrappedInstance, wrappedType)
         {
             _implementedProperties = propertiesNames;
             _isFilterUnderlyingObjectIfEnumerable = isFilterUnderlyingObjectIfEnumerable;
@@ -420,94 +423,119 @@ namespace TestProject.Helpers
         {
             if (_fillSerializationInfo != null && info != null)
             {
-                _fillSerializationInfo(info);
+                _fillSerializationInfo(info, WrappedObject);
             }
         }
 
         protected LambdaExpression BuildExpressionTree()
         {
-            var propertyInfos = GetObjectProperties(WrappedType);
-
-            var numberOfProperties = propertyInfos.Length;
-            var expressionBlockStatements = new List<Expression>(numberOfProperties);
-
-            var listConstructor = Expression.New(typeof(List<>).GetConstructor(new Type[0]));
-            var listVariable = Expression.Parameter(typeof(List<>), "listParam");
-            var listAssigment = Expression.Assign(listVariable, listConstructor);
-
-            //var foreachLoop = Expression.Loop();
-
-            var dictionaryConstructorCapacity = Expression.Constant(numberOfProperties, TypeOfInt);
-            var dictionaryConstructor = Expression.New(DictionaryConstructorInfo, dictionaryConstructorCapacity);
-            var dictionaryVariable = Expression.Parameter(TypeOfDictionary, "fieldsDictionary");
-            var dictionaryAssigment = Expression.Assign(dictionaryVariable, dictionaryConstructor);
-
-            var parameter = Expression.Parameter(TypeOfObject, "obj");
-
-            var castedParameterVariable = Expression.Parameter(parameterType, "castedObj");
-            var castedParameter = Expression.TypeAs(parameter, parameterType);
-            var castAssigment = Expression.Assign(castedParameterVariable, castedParameter);
-
-            var returnTarget = Expression.Label(TypeOfDictionary, "returnLabel");
-            var returnExpression = Expression.Label(returnTarget, dictionaryVariable);
-            var returnStatement = Expression.Return(returnTarget, dictionaryVariable, TypeOfDictionary);
-
-            var nullConstant = Expression.Constant(null);
-
-            var ifCastedsuccessfullyAddToDictionaryElseGoToReturn = Expression.IfThen(Expression.Equal(castedParameterVariable, nullConstant),
-                returnStatement);
-
-            expressionBlockStatements.Add(dictionaryVariable);
-            expressionBlockStatements.Add(dictionaryAssigment);
-            expressionBlockStatements.Add(castedParameterVariable);
-            expressionBlockStatements.Add(castAssigment);
-            expressionBlockStatements.Add(ifCastedsuccessfullyAddToDictionaryElseGoToReturn);
-
-            foreach (var propertyInfo in propertyInfos.Where(pi => propertiesNames.Contains(pi.Name)))
+            if (_isIEnumerableWrapped && _isFilterUnderlyingObjectIfEnumerable)
             {
-                var propertyGetterInfo = propertyInfo.GetGetMethod(false);
-                if (propertyGetterInfo != null && propertyGetterInfo.GetParameters().Length == 0)
-                {
-                    var propertyName = propertyInfo.Name;
-                    var propertyNameConstant = Expression.Constant(propertyName);
-                    var getterCall = Expression.Call(castedParameterVariable, propertyGetterInfo);
-                    var convertGetterValueToObject = Expression.Convert(getterCall, TypeOfObject);
-                    var addToDictionary = Expression.Call(dictionaryVariable, DictionaryAddMethodInfo,
-                        propertyNameConstant, convertGetterValueToObject);
-
-                    expressionBlockStatements.Add(addToDictionary);
-                }
+                return BuildExpressionTreeForEnumerable();
             }
 
-            expressionBlockStatements.Add(returnStatement);
-            expressionBlockStatements.Add(returnExpression);
+            return BuildExpressionTreeForEntireObject();
+        }
 
-            var expressionBlock = Expression.Block(TypeOfDictionary, new[] { dictionaryVariable, castedParameterVariable },
-                expressionBlockStatements);
+        private LambdaExpression BuildExpressionTreeForEntireObject()
+        {
+            var expressions = new List<Expression>();
 
-            var lambda = Expression.Lambda(expressionBlock, parameter);
+            var serializationInfo = Expression.Parameter(TypeofSerializationInfo, "serializationInfo");
+
+            var wrappedObject = Expression.Parameter(TypeOfObject, "wrappedObject");
+            
+            var castedInstanceVariable = Expression.Parameter(WrappedType, "castedObj");
+            var castedInstance = Expression.TypeAs(wrappedObject, WrappedType);
+            var castInstanceAssigment = Expression.Assign(castedInstanceVariable, castedInstance);
+
+            expressions.Add(castInstanceAssigment);
+
+            expressions.AddRange(AddObjectsToSerializationInfoStatements(serializationInfo, castedInstanceVariable));
+
+            var expressionsBlock = Expression.Block(new[] { castedInstanceVariable }, expressions);
+
+            var lambda = Expression.Lambda(expressionsBlock, serializationInfo, wrappedObject);
 
             return lambda;
         }
 
-        protected virtual List<Expression> AddObjectToSerializationInfoStatements(ParameterExpression collection, ParameterExpression instance)
+        private LambdaExpression BuildExpressionTreeForEnumerable()
         {
-            var propertyInfos = GetObjectProperties(WrappedType);
+            var expressions = new List<Expression>();
+            var serializationInfo = Expression.Parameter(TypeofSerializationInfo, "serializationInfo");
+
+            var wrappedObject = Expression.Parameter(TypeOfObject, "wrappedObject");
+
+            var castedInstanceVariable = Expression.Parameter(WrappedType, "castedObj");
+            var castedInstance = Expression.TypeAs(wrappedObject, WrappedType);
+            var castInstanceAssigment = Expression.Assign(castedInstanceVariable, castedInstance);
+
+            var enumerableType = TypeOfGenericIEnumerable.MakeGenericType(_underlyingObjectType);
+            var enumeratorType = TypeOfGenericIEnumerator.MakeGenericType(_underlyingObjectType);
+
+            var enumeratorVariable = Expression.Variable(enumeratorType, "enumerator");
+            var getEnumeratorCall = Expression.Call(castedInstanceVariable, enumerableType.GetMethod("GetEnumerator"));
+            var enumeratorVariableAssigment = Expression.Assign(enumeratorVariable, getEnumeratorCall);
+
+            var loopVariable = Expression.Parameter(_underlyingObjectType, "loopVar");
+
+            var moveNextCall = Expression.Call(enumeratorVariable, IEnumeratorMoveNextMethodInfo);
+
+            var breakLabel = Expression.Label("LoopBreak");
+
+            var trueConstant = Expression.Constant(true);
+
+            var currentAssigment = Expression.Assign(loopVariable, Expression.Property(enumeratorVariable, "Current"));
+
+            var loopContent = new List<Expression>();
+            loopContent.Add(currentAssigment);
+            loopContent.AddRange(AddObjectsToSerializationInfoStatements(serializationInfo, loopVariable));
+
+            var loopBody = Expression.Block(new[] { loopVariable, enumeratorVariable, castedInstanceVariable }, loopContent);
+
+            var moveNextEqualTrue = Expression.Equal(moveNextCall, trueConstant);
+
+            var loop =
+                Expression.Loop(
+                    Expression.IfThenElse(
+                        moveNextEqualTrue,
+                        loopBody,
+                        Expression.Break(breakLabel)),
+                breakLabel);
+
+
+            expressions.Add(castInstanceAssigment);
+            expressions.Add(enumeratorVariableAssigment);
+            expressions.Add(loop);
+
+            var expressionsBlock = Expression.Block(
+                new[] { enumeratorVariable, loopVariable, castedInstanceVariable },
+                expressions);
+
+            var lambda = Expression.Lambda(expressionsBlock, serializationInfo, wrappedObject);
+
+            return lambda;
+        }
+
+        protected virtual List<Expression> AddObjectsToSerializationInfoStatements(Expression serializationInfo, Expression instance)
+        {
+            var propertyInfos = GetObjectProperties(_underlyingObjectType);
             var statements = new List<Expression>(propertyInfos.Length);
 
-            foreach (var propertyInfo in propertyInfos.Where(pi => _implementedProperties.Contains(pi.Name)))
+            foreach (var propertyInfo in propertyInfos)//.Where(pi => _implementedProperties.Contains(pi.Name)))
             {
                 var propertyGetterInfo = propertyInfo.GetGetMethod(false);
                 if (propertyGetterInfo != null && propertyGetterInfo.GetParameters().Length == 0)
                 {
-                    var propertyNameConstant = Expression.Constant(propertyInfo.Name);
+                    var propertyNameConstant = Expression.Constant(propertyInfo.Name, TypeOfString);
                     var getterCall = Expression.Call(instance, propertyGetterInfo);
                     var convertedGetterValueToObject = Expression.Convert(getterCall, TypeOfObject);
-                    var propertyTypeConstant = Expression.Constant(propertyInfo.PropertyType, typeof(Type));
-                    var addToDictionary = Expression.Call(instance, SerializationInfoAddObjectMethodInfo,
+                    var propertyTypeConstant = Expression.Constant(propertyInfo.PropertyType, TypeOfType);
+                    var addToInfo = Expression.Call(serializationInfo, SerializationInfoAddObjectMethodInfo,
                         propertyNameConstant, convertedGetterValueToObject, propertyTypeConstant);
 
-                    statements.Add(addToDictionary);
+                    statements.Add(addToInfo);
                 }
             }
             return statements;
@@ -515,15 +543,12 @@ namespace TestProject.Helpers
 
         protected void InitializeMembers()
         {
-            _isIEnumerableWrapped = TypeOfIEnumerable.IsAssignableFrom(WrappedType);
-            _underlyingObjectType = GetRealType(WrappedType);
-
-
+            _underlyingObjectType = _isFilterUnderlyingObjectIfEnumerable ? GetRealType(WrappedType) : WrappedType;
         }
 
         protected void CompileDelegate(LambdaExpression expression)
         {
-            _fillSerializationInfo = (Action<SerializationInfo>)expression.Compile();
+            _fillSerializationInfo = (Action<SerializationInfo, object>)expression.Compile();
         }
 
         private PropertyInfo[] GetObjectProperties(Type objectType)
@@ -531,11 +556,12 @@ namespace TestProject.Helpers
             return objectType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
         }
 
-        private static Type GetRealType(Type objectType)
+        private Type GetRealType(Type objectType)
         {
             Type argumentType;
             if (TypeOfIEnumerable.IsAssignableFrom(objectType))
             {
+                _isIEnumerableWrapped = true;
                 argumentType = objectType.IsGenericType
                     ? objectType.GetGenericArguments()[0]
                     : TypeOfObject;
@@ -549,33 +575,32 @@ namespace TestProject.Helpers
 
         static SerializationFilterWrapper()
         {
-            TypeOfIEnumerable = typeof(IEnumerable<>);
+            TypeOfGenericIEnumerable = typeof(IEnumerable<>);
+            TypeOfIEnumerable = typeof(IEnumerable);
+            TypeOfGenericIEnumerator = typeof(IEnumerator<>);
+            TypeOfIEnumerator = typeof(IEnumerator);
             TypeOfString = typeof(string);
-            TypeOfString = typeof(object);
+            TypeOfObject = typeof(object);
+            TypeOfType = typeof(Type);
+            
+            TypeofSerializationInfo = typeof (SerializationInfo);
 
-            SerializationInfoAddObjectMethodInfo = TypeofSerializationInfo.GetMethod("Add", new[] { TypeOfString, TypeOfObject });
+            IEnumeratorMoveNextMethodInfo = TypeOfIEnumerator.GetMethod("MoveNext");
+            SerializationInfoAddObjectMethodInfo = TypeofSerializationInfo.GetMethod("AddValue", new[] { TypeOfString, TypeOfObject, TypeOfType });
         }
 
+        private static readonly Type TypeOfGenericIEnumerable;
         private static readonly Type TypeOfIEnumerable;
+        private static readonly Type TypeOfGenericIEnumerator;
+        private static readonly Type TypeOfIEnumerator;
         private static readonly Type TypeOfString;
         private static readonly Type TypeOfObject;
         private static readonly Type TypeofSerializationInfo;
+        private static readonly Type TypeOfType;
+
+        private static readonly MethodInfo IEnumeratorMoveNextMethodInfo;
 
         private static readonly MethodInfo SerializationInfoAddObjectMethodInfo;
-
-        protected class BriefPropertyInfo
-        {
-            public string PropertyName { get; set; }
-            public Type PropertyType { get; set; }
-            public object PropertyValue { get; set; }
-
-            public BriefPropertyInfo(string propertyName, object propertyValue, Type propertyType)
-            {
-                PropertyName = propertyName;
-                PropertyValue = PropertyValue;
-                PropertyType = propertyType;
-            }
-        }
     }
 
     //public class EnumerableWrapper<T, TUnderl> : Wrapper<T>

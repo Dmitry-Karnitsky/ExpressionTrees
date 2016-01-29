@@ -44,7 +44,7 @@ namespace TestProject.Models
                 {
                     ParseFieldsNamesFromQueryString(actionContext.Request.RequestUri.Query);
                     _returnType = actionContext.ActionDescriptor.ReturnType;
-                    PropertiesFilter.PrepareDelegate(_returnType, _desiredFields);
+                    //PropertiesFilter.PrepareDelegate(_returnType, _desiredFields);
                 })
                     .ContinueWith(prevTask =>
                     {

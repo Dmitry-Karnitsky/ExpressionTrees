@@ -15,26 +15,16 @@ namespace TestProject.Controllers
         //    return ret;
         //}
 
-        //[FilterFields]
-        //[HttpGet]
-        //public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
-        //{
-        //    var newList = new List<ObjectWithManyProperties>();
-
-        //    typeof(IEnumerable<ObjectWithNotSoManyProperties>).IsAssignableFrom(newList.GetType());
-
-        //    var list = new List<ObjectWithManyProperties>();
-        //    for (var i = 0; i < 3; i++)
-        //    {
-        //        list.Add(BuildObject());
-        //    }
-        //    return list;
-        //}
-
+        [FilterFields]
         [HttpGet]
-        public Wrapper<Dictionary<string, object>> Wrapper()
+        public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
         {
-            return new Wrapper<Dictionary<string, object>>();
+            var list = new List<ObjectWithManyProperties>();
+            for (var i = 0; i < 3; i++)
+            {
+                list.Add(BuildObject());
+            }
+            return list;
         }
 
         // GET api/values/5
