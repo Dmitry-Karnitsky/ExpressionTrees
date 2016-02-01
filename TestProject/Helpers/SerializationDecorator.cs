@@ -11,39 +11,53 @@ using System.Web.UI.WebControls;
 
 namespace TestProject.Helpers
 {
-    public class SerializationDecoratorManager
+    public class SerializationDecorator
     {
-        public static DecoratorBase GetDecorator(object instance, Type returnType, HashSet<string> propertiesNames)
+        public DecoratorBase GetDecorator(object instance, Type instanceType)
         {
-            var underlyingType = GetUnderlyingTypeIfEnumerable(returnType);
+            var underlyingType = GetUnderlyingTypeIfEnumerable(instanceType);
+
             if (underlyingType != null)
             {
-                var lambdaExpression = BuildExpressionTreeForObject(underlyingType, propertiesNames);
-                var compiledLambda = (Action<object, SerializationInfo>) lambdaExpression.Compile();
-                return new EnumerableObjectSerializationDecorator(instance, returnType, underlyingType, compiledLambda);
+                var compiledLambda = GetDelegate(underlyingType);
+                return new EnumerableObjectSerializationDecorator(instance, instanceType, underlyingType, compiledLambda);
             }
             else
             {
-                var lambdaExpression = BuildExpressionTreeForObject(returnType, propertiesNames);
-                var compiledLambda = (Action<object, SerializationInfo>)lambdaExpression.Compile();
-                return new ObjectSerializationDecorator(instance, returnType, compiledLambda);
+                var compiledLambda = GetDelegate(instanceType);
+                return new ObjectSerializationDecorator(instance, instanceType, compiledLambda);
             }
         }
 
-        private static LambdaExpression BuildExpressionTreeForObject(Type returnType, HashSet<string> propertiesNames)
+        protected virtual Action<object, SerializationInfo> GetDelegate(Type instanceType)
+        {
+            var lambdaExpression = GetLambdaExpression(instanceType);
+            return (Action<object, SerializationInfo>)lambdaExpression.Compile();
+        }
+
+        protected LambdaExpression GetLambdaExpression(Type instanceType)
         {
             var expressions = new List<Expression>();
 
             var serializationInfo = Expression.Parameter(TypeofSerializationInfo, "serializationInfo");
             var decoratedObject = Expression.Parameter(TypeOfObject, "decoratedObject");
 
-            var castedInstanceVariable = Expression.Parameter(returnType, "castedObj");
-            var castedInstance = Expression.TypeAs(decoratedObject, returnType);
+            var castedInstanceVariable = Expression.Parameter(instanceType, "castedObject");
+            var castedInstance = Expression.TypeAs(decoratedObject, instanceType);
             var castInstanceAssigment = Expression.Assign(castedInstanceVariable, castedInstance);
 
-            expressions.Add(castInstanceAssigment);
+            var variableEqualsNull = Expression.Equal(castedInstanceVariable, Expression.Constant(null));
 
-            expressions.AddRange(AddObjectsToSerializationInfoStatements(returnType, serializationInfo, castedInstanceVariable, propertiesNames));
+            var exceptionThrow =
+                Expression.Throw(
+                    Expression.Constant(new InvalidCastException("instance is not of type of " + instanceType)));
+
+            var checkCastIsSucessfull = Expression.IfThen(variableEqualsNull, exceptionThrow);
+
+            expressions.Add(castInstanceAssigment);
+            expressions.Add(checkCastIsSucessfull);
+
+            expressions.AddRange(AddFieldsToSerializationInfoStatements(instanceType, serializationInfo, castedInstanceVariable));
 
             var expressionsBlock = Expression.Block(new[] { castedInstanceVariable }, expressions);
 
@@ -52,12 +66,12 @@ namespace TestProject.Helpers
             return lambda;
         }
 
-        private static List<Expression> AddObjectsToSerializationInfoStatements(Type objectType, Expression serializationInfo, Expression instance, HashSet<string> propertiesNames)
+        protected List<Expression> AddFieldsToSerializationInfoStatements(Type objectType, Expression serializationInfo, Expression instance)
         {
             var propertyInfos = GetObjectProperties(objectType);
-            var statements = new List<Expression>(propertyInfos.Length);
+            var statements = new List<Expression>();
 
-            foreach (var propertyInfo in propertyInfos.Where(pi => propertiesNames.Contains(pi.Name)))
+            foreach (var propertyInfo in propertyInfos)
             {
                 var propertyGetterInfo = propertyInfo.GetGetMethod(false);
                 if (propertyGetterInfo != null && propertyGetterInfo.GetParameters().Length == 0)
@@ -75,12 +89,12 @@ namespace TestProject.Helpers
             return statements;
         }
 
-        private static PropertyInfo[] GetObjectProperties(Type objectType)
+        protected virtual IEnumerable<PropertyInfo> GetObjectProperties(Type objectType)
         {
             return objectType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
         }
 
-        private static Type GetUnderlyingTypeIfEnumerable(Type type)
+        protected Type GetUnderlyingTypeIfEnumerable(Type type)
         {
             if (TypeOfIEnumerable.IsAssignableFrom(type))
             {
@@ -189,7 +203,7 @@ namespace TestProject.Helpers
 
         #region Static constructor and fields
 
-        static SerializationDecoratorManager()
+        static SerializationDecorator()
         {
             TypeOfIEnumerable = typeof(IEnumerable);
             TypeOfString = typeof(string);
