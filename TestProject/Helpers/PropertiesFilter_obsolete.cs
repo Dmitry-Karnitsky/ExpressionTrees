@@ -9,7 +9,7 @@ using WebGrease.Css.Ast.MediaQuery;
 
 namespace TestProject.Helpers
 {
-    public static class PropertiesFilter
+    public static class PropertiesFilter_obsolete
     {
         public static void PrepareDelegate(Type objectType, HashSet<string> propertiesNames)
         {
@@ -240,7 +240,7 @@ namespace TestProject.Helpers
 
         #region Private Fields and Static Constructor
 
-        static PropertiesFilter()
+        static PropertiesFilter_obsolete()
         {
             TypeOfIEnumerable = typeof(IEnumerable);
             TypeOfInt = typeof(int);
@@ -463,8 +463,8 @@ namespace TestProject.Helpers
         private LambdaExpression BuildExpressionTreeForEnumerable()
         {
             var expressions = new List<Expression>();
-            var serializationInfo = Expression.Parameter(TypeofSerializationInfo, "serializationInfo");
 
+            var serializationInfo = Expression.Parameter(TypeofSerializationInfo, "serializationInfo");
             var wrappedObject = Expression.Parameter(TypeOfObject, "wrappedObject");
 
             var castedInstanceVariable = Expression.Parameter(WrappedType, "castedObj");
@@ -492,7 +492,7 @@ namespace TestProject.Helpers
             loopContent.Add(currentAssigment);
             loopContent.AddRange(AddObjectsToSerializationInfoStatements(serializationInfo, loopVariable));
 
-            var loopBody = Expression.Block(new[] { loopVariable, enumeratorVariable, castedInstanceVariable }, loopContent);
+            var loopBody = Expression.Block(loopContent);
 
             var moveNextEqualTrue = Expression.Equal(moveNextCall, trueConstant);
 
@@ -517,6 +517,69 @@ namespace TestProject.Helpers
 
             return lambda;
         }
+
+        //private static object BuildExpressionTreeForEnumerable(Type enumerableObjectsType, Type underlyingType, Action<object, SerializationInfo> lambdaForOneObject)
+        //{
+        //    var expressions = new List<Expression>();
+
+        //    var serializationInfo = Expression.Parameter(TypeofSerializationInfo, "serializationInfo");
+        //    var wrappedObject = Expression.Parameter(TypeOfObject, "wrappedObject");
+
+        //    var castedInstanceVariable = Expression.Parameter(enumerableObjectsType, "castedObj");
+        //    var castedInstance = Expression.TypeAs(wrappedObject, enumerableObjectsType);
+        //    var castInstanceAssigment = Expression.Assign(castedInstanceVariable, castedInstance);
+
+        //    var listVariable = Expression.Parameter(TypeOfList, "list");
+        //    var listAssigment = Expression.Assign(listVariable, Expression.New(ListConstructorInfo));
+
+        //    var enumerableType = TypeOfGenericIEnumerable.MakeGenericType(underlyingType);
+        //    var enumeratorType = TypeOfGenericIEnumerator.MakeGenericType(underlyingType);
+
+        //    var enumeratorVariable = Expression.Variable(enumeratorType, "enumerator");
+        //    var getEnumeratorCall = Expression.Call(castedInstanceVariable, enumerableType.GetMethod("GetEnumerator"));
+        //    var enumeratorVariableAssigment = Expression.Assign(enumeratorVariable, getEnumeratorCall);
+
+        //    var loopVariable = Expression.Parameter(underlyingType, "loopVar");
+
+        //    var moveNextCall = Expression.Call(enumeratorVariable, IEnumeratorMoveNextMethodInfo);
+
+        //    var breakLabel = Expression.Label("LoopBreak");
+
+        //    var trueConstant = Expression.Constant(true);
+
+        //    var currentAssigment = Expression.Assign(loopVariable, Expression.Property(enumeratorVariable, "Current"));
+        //    var addToList = Expression.Call(listVariable, ListAddMethodInfo, Expression.New(SerializationDecoratorConstructorInfo, loopVariable, Expression.Constant(underlyingType), Expression.Constant(lambdaForOneObject)));
+
+        //    var loopContent = new List<Expression>();
+        //    loopContent.Add(currentAssigment);
+        //    loopContent.Add(addToList);
+
+        //    var loopBody = Expression.Block(loopContent);
+
+        //    var moveNextEqualTrue = Expression.Equal(moveNextCall, trueConstant);
+
+        //    var loop =
+        //        Expression.Loop(
+        //            Expression.IfThenElse(
+        //                moveNextEqualTrue,
+        //                loopBody,
+        //                Expression.Break(breakLabel)),
+        //        breakLabel);
+
+
+        //    expressions.Add(castInstanceAssigment);
+        //    expressions.Add(listAssigment);
+        //    expressions.Add(enumeratorVariableAssigment);
+        //    expressions.Add(loop);
+
+        //    var expressionsBlock = Expression.Block(
+        //        new[] { enumeratorVariable, loopVariable, castedInstanceVariable },
+        //        expressions);
+
+        //    var lambda = Expression.Lambda(expressionsBlock, wrappedObject, serializationInfo);
+
+        //    return lambda;
+        //}
 
         protected virtual List<Expression> AddObjectsToSerializationInfoStatements(Expression serializationInfo, Expression instance)
         {

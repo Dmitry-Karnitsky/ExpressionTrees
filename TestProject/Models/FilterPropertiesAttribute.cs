@@ -26,10 +26,8 @@ namespace TestProject.Models
             if (content != null)
             {
                 WaitForActionExecutingTask();
-                //content.Value = content.Value.FilterFields(_returnType, _desiredFields); // rude, but for JsonSerializer it works fine
-                var contentValue = content.Value.FilterFields(_returnType, _desiredFields);
-                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetType(), contentValue, // TODO: have to get rid of contentValue.GetType()
-                    content.Formatter);
+                var contentValue = SerializationDecoratorManager.PrepareDecorator(content.Value, _returnType, _desiredFields);
+                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
             }
             else
             {

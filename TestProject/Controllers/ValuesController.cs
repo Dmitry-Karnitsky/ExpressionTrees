@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Web.Http;
 using TestProject.Helpers;
 using TestProject.Models;
@@ -20,7 +21,8 @@ namespace TestProject.Controllers
         public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
         {
             var list = new List<ObjectWithManyProperties>();
-            for (var i = 0; i < 3; i++)
+            var count = new Random().Next(100);
+            for (var i = 0; i < count; i++)
             {
                 list.Add(BuildObject());
             }
