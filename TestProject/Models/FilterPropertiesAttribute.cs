@@ -26,8 +26,8 @@ namespace TestProject.Models
             if (content != null)
             {
                 WaitForActionExecutingTask();
-                var contentValue = SerializationDecoratorManager.PrepareDecorator(content.Value, _returnType, _desiredFields);
-                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
+                //var contentValue = SerializationDecoratorManager.PrepareDecorator(content.Value, _returnType, _desiredFields);
+                //actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
             }
             else
             {
