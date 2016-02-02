@@ -21,7 +21,7 @@ namespace TestProject.Controllers
         public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
         {
             var list = new List<ObjectWithManyProperties>();
-            var count = new Random().Next(100);
+            var count = new Random().Next(10000);
             for (var i = 0; i < count; i++)
             {
                 list.Add(BuildObject());

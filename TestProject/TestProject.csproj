@@ -155,8 +155,8 @@
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
     <Compile Include="Helpers\FieldsFilterHelper.cs" />
-    <Compile Include="Helpers\SerializationDecorator.cs" />
     <Compile Include="Helpers\SerializationFilterDecorator.cs" />
+    <Compile Include="Helpers\CachableSerializationFilterDecorator.cs" />
     <Compile Include="Models\FilterPropertiesAttribute.cs" />
     <Compile Include="Models\ObjectWithManyProperties.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
