@@ -7,7 +7,7 @@ using System.Web.Http.Controllers;
 using System.Web.Http.Filters;
 using TestProject.Helpers;
 
-namespace TestProject.Models
+namespace TestProject.Attributes
 {
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class FilterFields : ActionFilterAttribute
@@ -15,10 +15,6 @@ namespace TestProject.Models
         private const string DesiredFieldsParameterFromQueryString = "fields";
 
         private readonly CachableSerializationFilterDecorator _filterDecorator;
-
-        private HashSet<string> _requestedProperties;
-        private Type _returnType;
-        private Task _actionExecutionTask;
 
         public FilterFields()
         {
@@ -31,16 +27,22 @@ namespace TestProject.Models
         // Action executed in 6.0006ms
         public override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
         {
-            var content = actionExecutedContext.Response.Content as ObjectContent;
-            if (content != null)
+            object task;
+            if (actionExecutedContext.ActionContext.ActionArguments.TryGetValue("ActionExecutionTask", out task))
             {
-                WaitForActionExecutingTask();
-                var contentValue = _filterDecorator.GetDecorator(content.Value, _returnType, _requestedProperties);
-                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
-            }
-            else
-            {
-                throw new Exception(); // for debug purposes only
+                var content = actionExecutedContext.Response.Content as ObjectContent;
+                if (content != null)
+                {
+                    WaitForActionExecutingTask((Task)task);
+                    var returnValue = (Type)actionExecutedContext.ActionContext.ActionArguments["ReturnType"];
+                    var requestedProperties = (HashSet<string>)actionExecutedContext.ActionContext.ActionArguments["RequestedProperties"];
+                    var contentValue = _filterDecorator.GetDecorator(content.Value, returnValue, requestedProperties);
+                    actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
+                }
+                else
+                {
+                    throw new Exception(); // for debug purposes only
+                }
             }
         }
 
@@ -50,17 +52,21 @@ namespace TestProject.Models
         // Action executing 3.0003ms
         public override void OnActionExecuting(HttpActionContext actionContext)
         {
-            _actionExecutionTask =
-                Task.Factory.StartNew(() =>
+            actionContext.ActionArguments.Add("ActionExecutionTask",
+                Task.Factory.StartNew(context =>
                 {
-                    _requestedProperties = ParseFieldsNamesFromQueryString(actionContext.Request.RequestUri.Query);
-                    _returnType = actionContext.ActionDescriptor.ReturnType;
-                    _filterDecorator.PrepareDecorator(_returnType, _requestedProperties);
-                })
+                    var httpActionContext = (HttpActionContext)context;
+                    var requestedProperties = ParseFieldsNamesFromQueryString(httpActionContext.Request.RequestUri.Query);
+                    var returnType = httpActionContext.ActionDescriptor.ReturnType;
+                    _filterDecorator.PrepareDecorator(returnType, requestedProperties);
+
+                    httpActionContext.ActionArguments.Add("RequestedProperties", requestedProperties);
+                    httpActionContext.ActionArguments.Add("ReturnType", returnType);
+                }, actionContext)
                     .ContinueWith(prevTask =>
                     {
                         base.OnActionExecuting(actionContext);
-                    });
+                    }));
         }
 
         private HashSet<string> ParseFieldsNamesFromQueryString(string queryString)
@@ -75,11 +81,11 @@ namespace TestProject.Models
             return null;
         }
 
-        private void WaitForActionExecutingTask()
+        private void WaitForActionExecutingTask(Task task)
         {
-            if (_actionExecutionTask != null)
+            if (task != null)
             {
-                _actionExecutionTask.GetAwaiter().GetResult();
+                task.GetAwaiter().GetResult();
             }
         }
     }
