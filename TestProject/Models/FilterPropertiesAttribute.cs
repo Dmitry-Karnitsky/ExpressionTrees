@@ -7,12 +7,16 @@ using System.Web.Http.Controllers;
 using System.Web.Http.Filters;
 using TestProject.Helpers;
 
-namespace TestProject.Attributes
+namespace TestProject.Models
 {
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class FilterFields : ActionFilterAttribute
     {
-        private const string DesiredFieldsParameterFromQueryString = "fields";
+        public const string FilterFieldsParameterFromQueryString = "fields";
+        public const char ParametersSeparator = ',';
+
+        private const string ActionExecutingTaskKey = "ActionExecutionTask";
+        private const string RequestedPropertiesKey = "RequestedProperties";
 
         private readonly CachableSerializationFilterDecorator _filterDecorator;
 
@@ -21,73 +25,97 @@ namespace TestProject.Attributes
             _filterDecorator = new CachableSerializationFilterDecorator();
         }
 
-        // if not in cache:
-        // Action executed in 7.0007ms
-        // if cached
-        // Action executed in 6.0006ms
         public override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
         {
-            object task;
-            if (actionExecutedContext.ActionContext.ActionArguments.TryGetValue("ActionExecutionTask", out task))
+            object taskObject;
+            var actionArguments = actionExecutedContext.ActionContext.ActionArguments;
+            if (actionExecutedContext.Response == null || !actionArguments.TryGetValue(ActionExecutingTaskKey, out taskObject))
             {
-                var content = actionExecutedContext.Response.Content as ObjectContent;
-                if (content != null)
+                return;
+            }
+
+            var content = actionExecutedContext.Response.Content as ObjectContent;
+            if (content != null)
+            {
+                WaitForActionExecutingTask((Task)taskObject);
+                var requestedProperties = (HashSet<string>)actionArguments[RequestedPropertiesKey];
+                if (requestedProperties == null)
                 {
-                    WaitForActionExecutingTask((Task)task);
-                    var returnValue = (Type)actionExecutedContext.ActionContext.ActionArguments["ReturnType"];
-                    var requestedProperties = (HashSet<string>)actionExecutedContext.ActionContext.ActionArguments["RequestedProperties"];
-                    var contentValue = _filterDecorator.GetDecorator(content.Value, returnValue, requestedProperties);
-                    actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
+                    return;
                 }
-                else
-                {
-                    throw new Exception(); // for debug purposes only
-                }
+
+                var returnType = actionExecutedContext.ActionContext.ActionDescriptor.ReturnType;
+                var contentValue = _filterDecorator.GetDecorator(content.Value, returnType, requestedProperties);
+
+                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
             }
         }
 
-        // if not in cache:
-        // Action executing 64.0064ms
-        // if cached
-        // Action executing 3.0003ms
         public override void OnActionExecuting(HttpActionContext actionContext)
         {
-            actionContext.ActionArguments.Add("ActionExecutionTask",
+            actionContext.ActionArguments.Add(ActionExecutingTaskKey,
                 Task.Factory.StartNew(context =>
                 {
-                    var httpActionContext = (HttpActionContext)context;
+                    var httpActionContext = (HttpActionContext) context;
                     var requestedProperties = ParseFieldsNamesFromQueryString(httpActionContext.Request.RequestUri.Query);
+                    if (requestedProperties == null)
+                    {
+                        return;
+                    }
+
                     var returnType = httpActionContext.ActionDescriptor.ReturnType;
                     _filterDecorator.PrepareDecorator(returnType, requestedProperties);
 
-                    httpActionContext.ActionArguments.Add("RequestedProperties", requestedProperties);
-                    httpActionContext.ActionArguments.Add("ReturnType", returnType);
-                }, actionContext)
-                    .ContinueWith(prevTask =>
-                    {
-                        base.OnActionExecuting(actionContext);
-                    }));
+                    httpActionContext.ActionArguments.Add(RequestedPropertiesKey, requestedProperties);
+                    base.OnActionExecuting(actionContext);
+                }, actionContext));
         }
 
-        private HashSet<string> ParseFieldsNamesFromQueryString(string queryString)
+        private static HashSet<string> ParseFieldsNamesFromQueryString(string queryString)
         {
-            var param = HttpUtility.ParseQueryString(queryString);
-            if (param[DesiredFieldsParameterFromQueryString] != null)
+            var queryParameters = HttpUtility.ParseQueryString(queryString);
+            if (queryParameters[FilterFieldsParameterFromQueryString] != null)
             {
-                var queryParams = param[DesiredFieldsParameterFromQueryString].Split(',');
+                var queryParams = queryParameters[FilterFieldsParameterFromQueryString].Split(ParametersSeparator);
                 Array.Sort(queryParams);
-                return new HashSet<string>(queryParams);
+                return new HashSet<string>(queryParams, new PropertiesComparer());
             }
             return null;
         }
 
-        private void WaitForActionExecutingTask(Task task)
+        private static void WaitForActionExecutingTask(Task task)
         {
             if (task != null)
             {
                 task.GetAwaiter().GetResult();
             }
         }
-    }
 
+        #region PropertiesComparer
+
+        private class PropertiesComparer : IEqualityComparer<string>
+        {
+            public bool Equals(string x, string y)
+            {
+                if (x == null)
+                    throw new ArgumentNullException("x");
+                if (y == null)
+                    throw new ArgumentNullException("y");
+
+                return String.Equals(x.Trim(), y.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            public int GetHashCode(string obj)
+            {
+                if (obj == null)
+                {
+                    throw new ArgumentNullException("obj");
+                }
+
+                return obj.GetHashCode();
+            }
+        }
+
+        #endregion
+    }
 }

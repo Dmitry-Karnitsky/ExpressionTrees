@@ -100,7 +100,7 @@ namespace TestProject.Helpers
             return statements;
         }
 
-        protected static IEnumerable<PropertyInfo> GetObjectProperties(Type objectType, HashSet<string> propertiesNames)
+        protected static IEnumerable<PropertyInfo> GetObjectProperties(Type objectType, HashSet<string> propertiesNames = null)
         {
             return propertiesNames != null
                 ? objectType.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(property => propertiesNames.Contains(property.Name))

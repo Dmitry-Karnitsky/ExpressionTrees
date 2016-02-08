@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.Serialization;
-using System.Threading;
 
 namespace TestProject.Helpers
 {
     public class CachableSerializationFilterDecorator : SerializationFilterDecorator
     {
+        private const string PropertiesKeySeparator = "|";
+        
         public void PrepareDecorator(Type instanceType, HashSet<string> propertiesNames)
         {
             if (instanceType == null)
@@ -16,39 +16,39 @@ namespace TestProject.Helpers
 
             var actionArgumentType = GetUnderlyingTypeIfEnumerable(instanceType) ?? instanceType;
 
-            // to avoid caching with wrong parameter when properties names hashset contains
+            // to avoid caching with wrong key when properties names hashset
             // contains properties that return object does not contain
             // is it necessary?
-            //var allObjectProperties = GetObjectProperties(actionArgumentType, null);
+            //var allObjectProperties = GetObjectProperties(actionArgumentType);
             //var copiedHashSet = new HashSet<string>(propertiesNames);
             //copiedHashSet.IntersectWith(allObjectProperties.Select(p => p.Name));
             //var propertiesNamesKey = String.Join("|", copiedHashSet);
 
-            var keyParams = propertiesNames ?? GetObjectProperties(instanceType, null).Select(p => p.Name);
+            var keyParams = propertiesNames ?? GetObjectProperties(instanceType).Select(p => p.Name);
 
-            var propertiesNamesKey = String.Join("|", keyParams);
+            var propertiesNamesKey = String.Join(PropertiesKeySeparator, keyParams);
 
             if (!IsInCache(actionArgumentType, propertiesNamesKey))
             {
                 var lambda = GetDelegate(actionArgumentType, propertiesNames);
                 EnsureKeyInitialized(actionArgumentType);
-                Cache[actionArgumentType][propertiesNamesKey] = lambda;
+                cache[actionArgumentType][propertiesNamesKey] = lambda;
             }
         }
 
         protected override Action<object, SerializationInfo> GetDelegate(Type instanceType, HashSet<string> propertiesNames)
         {
-            //var allObjectProperties = GetObjectProperties(instanceType, null);
+            //var allObjectProperties = GetObjectProperties(instanceType);
             //var copiedHashSet = new HashSet<string>(propertiesNames);
             //copiedHashSet.IntersectWith(allObjectProperties.Select(p => p.Name));
             //var propertiesNamesKey = String.Join("|", copiedHashSet);
 
-            var keyParams = propertiesNames ?? GetObjectProperties(instanceType, null).Select(p => p.Name);
-            var propertiesNamesKey = String.Join("|", keyParams);
+            var keyParams = propertiesNames ?? GetObjectProperties(instanceType).Select(p => p.Name);
+            var propertiesNamesKey = String.Join(PropertiesKeySeparator, keyParams);
 
             if (IsInCache(instanceType, propertiesNamesKey))
             {
-                return Cache[instanceType][propertiesNamesKey];
+                return cache[instanceType][propertiesNamesKey];
             }
 
             return base.GetDelegate(instanceType, propertiesNames);
@@ -56,9 +56,9 @@ namespace TestProject.Helpers
 
         protected static bool IsInCache(Type instanceType, string propertiesNames)
         {
-            if (Cache.ContainsKey(instanceType))
+            if (cache.ContainsKey(instanceType))
             {
-                return Cache[instanceType].ContainsKey(propertiesNames);
+                return cache[instanceType].ContainsKey(propertiesNames);
             }
             return false;
         }
@@ -67,13 +67,13 @@ namespace TestProject.Helpers
         {
             lock (keyType)
             {
-                if (!Cache.ContainsKey(keyType))
+                if (!cache.ContainsKey(keyType))
                 {
-                    Cache[keyType] = new Dictionary<string, Action<object, SerializationInfo>>();
+                    cache[keyType] = new Dictionary<string, Action<object, SerializationInfo>>();
                 }
             }
         }
 
-        protected static Dictionary<Type, Dictionary<string, Action<object, SerializationInfo>>> Cache = new Dictionary<Type, Dictionary<string, Action<object, SerializationInfo>>>();
+        protected static Dictionary<Type, Dictionary<string, Action<object, SerializationInfo>>> cache = new Dictionary<Type, Dictionary<string, Action<object, SerializationInfo>>>();
     }
 }
