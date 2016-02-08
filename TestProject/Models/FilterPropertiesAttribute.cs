@@ -9,67 +9,113 @@ using TestProject.Helpers;
 
 namespace TestProject.Models
 {
-
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class FilterFields : ActionFilterAttribute
     {
-        private const string DesiredFieldsParameterFromQueryString = "fields";
+        public const string FilterFieldsParameterFromQueryString = "fields";
+        public const char ParametersSeparator = ',';
 
-        private HashSet<string> _desiredFields;
-        private Type _returnType;
+        private const string ActionExecutingTaskKey = "ActionExecutionTask";
+        private const string RequestedPropertiesKey = "RequestedProperties";
 
-        private Task _actionExecutionTask;
+        private readonly CachableSerializationFilterDecorator _filterDecorator;
+
+        public FilterFields()
+        {
+            _filterDecorator = new CachableSerializationFilterDecorator();
+        }
 
         public override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
         {
+            object taskObject;
+            var actionArguments = actionExecutedContext.ActionContext.ActionArguments;
+            if (actionExecutedContext.Response == null || !actionArguments.TryGetValue(ActionExecutingTaskKey, out taskObject))
+            {
+                return;
+            }
+
             var content = actionExecutedContext.Response.Content as ObjectContent;
             if (content != null)
             {
-                WaitForActionExecutingTask();
-                //content.Value = content.Value.FilterFields(_returnType, _desiredFields); // rude, but for JsonSerializer it works fine
-                var contentValue = content.Value.FilterFields(_returnType, _desiredFields);
-                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetType(), contentValue, // TODO: have to get rid of contentValue.GetType()
-                    content.Formatter);
-            }
-            else
-            {
-                throw new Exception(); // for debug purposes only
+                WaitForActionExecutingTask((Task)taskObject);
+                var requestedProperties = (HashSet<string>)actionArguments[RequestedPropertiesKey];
+                if (requestedProperties == null)
+                {
+                    return;
+                }
+
+                var returnType = actionExecutedContext.ActionContext.ActionDescriptor.ReturnType;
+                var contentValue = _filterDecorator.GetDecorator(content.Value, returnType, requestedProperties);
+
+                actionExecutedContext.Response.Content = new ObjectContent(contentValue.GetDecoratorType(), contentValue, content.Formatter);
             }
         }
 
         public override void OnActionExecuting(HttpActionContext actionContext)
         {
-            _actionExecutionTask =
-                Task.Factory.StartNew(() =>
+            actionContext.ActionArguments.Add(ActionExecutingTaskKey,
+                Task.Factory.StartNew(context =>
                 {
-                    ParseFieldsNamesFromQueryString(actionContext.Request.RequestUri.Query);
-                    _returnType = actionContext.ActionDescriptor.ReturnType;
-                    PropertiesFilter.PrepareDelegate(_returnType, _desiredFields);
-                })
-                    .ContinueWith(prevTask =>
+                    var httpActionContext = (HttpActionContext) context;
+                    var requestedProperties = ParseFieldsNamesFromQueryString(httpActionContext.Request.RequestUri.Query);
+                    if (requestedProperties == null)
                     {
-                        base.OnActionExecuting(actionContext);
-                    });
+                        return;
+                    }
+
+                    var returnType = httpActionContext.ActionDescriptor.ReturnType;
+                    _filterDecorator.PrepareDecorator(returnType, requestedProperties);
+
+                    httpActionContext.ActionArguments.Add(RequestedPropertiesKey, requestedProperties);
+                    base.OnActionExecuting(actionContext);
+                }, actionContext));
         }
 
-        private void ParseFieldsNamesFromQueryString(string queryString)
+        private static HashSet<string> ParseFieldsNamesFromQueryString(string queryString)
         {
-            var param = HttpUtility.ParseQueryString(queryString);
-            if (param[DesiredFieldsParameterFromQueryString] != null)
+            var queryParameters = HttpUtility.ParseQueryString(queryString);
+            if (queryParameters[FilterFieldsParameterFromQueryString] != null)
             {
-                var queryParams = param[DesiredFieldsParameterFromQueryString].Split(',');
+                var queryParams = queryParameters[FilterFieldsParameterFromQueryString].Split(ParametersSeparator);
                 Array.Sort(queryParams);
-                _desiredFields = new HashSet<string>(queryParams);
+                return new HashSet<string>(queryParams, new PropertiesComparer());
             }
+            return null;
         }
 
-        private void WaitForActionExecutingTask()
+        private static void WaitForActionExecutingTask(Task task)
         {
-            if (_actionExecutionTask != null)
+            if (task != null)
             {
-                _actionExecutionTask.GetAwaiter().GetResult();
+                task.GetAwaiter().GetResult();
             }
         }
-    }
 
+        #region PropertiesComparer
+
+        private class PropertiesComparer : IEqualityComparer<string>
+        {
+            public bool Equals(string x, string y)
+            {
+                if (x == null)
+                    throw new ArgumentNullException("x");
+                if (y == null)
+                    throw new ArgumentNullException("y");
+
+                return String.Equals(x.Trim(), y.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            public int GetHashCode(string obj)
+            {
+                if (obj == null)
+                {
+                    throw new ArgumentNullException("obj");
+                }
+
+                return obj.GetHashCode();
+            }
+        }
+
+        #endregion
+    }
 }
