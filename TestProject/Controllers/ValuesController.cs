@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Web.Http;
+using TestProject.Attributes;
 using TestProject.Models;
 
 namespace TestProject.Controllers
@@ -17,15 +18,20 @@ namespace TestProject.Controllers
 
         [FilterFields]
         [HttpGet]
-        public IEnumerable<ObjectWithNotSoManyProperties> FilterObjectProperties()
+        public ObjectWithEnumerableInside FilterObjectProperties()
         {
             var list = new List<ObjectWithManyProperties>();
-            var count = new Random().Next(10000);
-            for (var i = 0; i < count; i++)
+            for (var i = 0; i < 5; i++)
             {
                 list.Add(BuildObject());
             }
-            return list;
+            return new ObjectWithEnumerableInside
+            {
+                Prop1 = "SomeString", 
+                Prop2 = 10.5,
+                Prop3 = 6,
+                Prop4 = list
+            };
         }
 
         // GET api/values/5

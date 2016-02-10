@@ -7,7 +7,7 @@ using System.Web.Http.Controllers;
 using System.Web.Http.Filters;
 using TestProject.Helpers;
 
-namespace TestProject.Models
+namespace TestProject.Attributes
 {
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class FilterFields : ActionFilterAttribute
@@ -18,11 +18,11 @@ namespace TestProject.Models
         private const string ActionExecutingTaskKey = "ActionExecutionTask";
         private const string RequestedPropertiesKey = "RequestedProperties";
 
-        private readonly CachableSerializationFilterDecorator _filterDecorator;
+        private readonly SerializationFilterDecorator _filterDecorator;
 
         public FilterFields()
         {
-            _filterDecorator = new CachableSerializationFilterDecorator();
+            _filterDecorator = new SerializationFilterDecorator();
         }
 
         public override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
@@ -63,8 +63,8 @@ namespace TestProject.Models
                         return;
                     }
 
-                    var returnType = httpActionContext.ActionDescriptor.ReturnType;
-                    _filterDecorator.PrepareDecorator(returnType, requestedProperties);
+                    //var returnType = httpActionContext.ActionDescriptor.ReturnType;
+                    //_filterDecorator.PrepareDecorator(returnType, requestedProperties);
 
                     httpActionContext.ActionArguments.Add(RequestedPropertiesKey, requestedProperties);
                     base.OnActionExecuting(actionContext);
@@ -78,7 +78,7 @@ namespace TestProject.Models
             {
                 var queryParams = queryParameters[FilterFieldsParameterFromQueryString].Split(ParametersSeparator);
                 Array.Sort(queryParams);
-                return new HashSet<string>(queryParams, new PropertiesComparer());
+                return new HashSet<string>(queryParams);
             }
             return null;
         }
@@ -90,32 +90,5 @@ namespace TestProject.Models
                 task.GetAwaiter().GetResult();
             }
         }
-
-        #region PropertiesComparer
-
-        private class PropertiesComparer : IEqualityComparer<string>
-        {
-            public bool Equals(string x, string y)
-            {
-                if (x == null)
-                    throw new ArgumentNullException("x");
-                if (y == null)
-                    throw new ArgumentNullException("y");
-
-                return String.Equals(x.Trim(), y.Trim(), StringComparison.OrdinalIgnoreCase);
-            }
-
-            public int GetHashCode(string obj)
-            {
-                if (obj == null)
-                {
-                    throw new ArgumentNullException("obj");
-                }
-
-                return obj.GetHashCode();
-            }
-        }
-
-        #endregion
     }
 }

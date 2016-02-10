@@ -14,7 +14,7 @@ namespace TestProject.Helpers
         {
             return GetDecorator(instance, instanceType, null);
         }
-        
+
         public DecoratorBase GetDecorator(object instance, Type instanceType, HashSet<string> propertiesNames)
         {
             if (instance == null)
@@ -41,7 +41,7 @@ namespace TestProject.Helpers
         {
             if (instanceType == null)
                 throw new ArgumentNullException("instanceType");
-            
+
             var lambdaExpression = GetLambdaExpression(instanceType, propertiesNames);
             return (Action<object, SerializationInfo>)lambdaExpression.Compile();
         }

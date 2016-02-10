@@ -1,4 +1,6 @@
-﻿namespace TestProject.Models
+﻿using System.Collections.Generic;
+
+namespace TestProject.Models
 {
     public class ObjectWithManyProperties : ObjectWithNotSoManyProperties
     {
@@ -24,5 +26,13 @@
         public string Property7 { get; set; }
         public string Property8 { get; set; }
         public string Property9 { get; set; }
+    }
+
+    public class ObjectWithEnumerableInside
+    {
+        public string Prop1 { get; set; }
+        public double Prop2 { get; set; }
+        public int Prop3 { get; set; }
+        public IEnumerable<ObjectWithNotSoManyProperties> Prop4 { get; set; }
     }
 }
