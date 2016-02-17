@@ -3,6 +3,7 @@
 void Main()
 {
     TreeNode _root = new TreeNode("root");
+    
     var testRoutes =  
     new[]
             {
@@ -17,9 +18,52 @@ void Main()
                 "Prop4",
                 "Prop5"
             };
-    BuildTree(_root, testRoutes);
+
+
+    string[][] strings = new string[testRoutes.Length][];
+    for(var i = 0; i < testRoutes.Length; i++)
+    {
+        strings[i] = testRoutes[i].Split('.');
+    }
+    
+    //BuildTree(_root, testRoutes);
+    
+    
+    BuildTree(_root, strings);
     
     _root.Dump();
+    
+}
+//
+//protected void BuildTree(TreeNode root, string[][] routes)
+//{
+//    if (!routes.Any())
+//    {
+//        return;
+//    }
+//
+//    var grouped = routes.GroupBy(e => e.First()).ToDictionary(i => i.Key, i =>
+//    {
+//        return i.Select(e => e.Skip(1).ToArray()).Where(e => e.Any()).ToArray();
+//    });
+//
+//    foreach (var item in grouped)
+//    {
+//        var node = new TreeNode(item.Key);
+//        root.ChildNodes.Add(node);
+//        BuildTree(node, item.Value);
+//    }
+//}
+
+
+protected void BuildTree(TreeNode root, IEnumerable<IEnumerable<string>> routes)
+{
+    foreach (var item in routes.GroupBy(e => e.First()))
+    {
+        var node = new TreeNode(item.Key);
+        root.ChildNodes.Add(node);
+        BuildTree(node, item.Select(e => e.Skip(1)).Where(e => e.Any()));
+    }
 }
 
 protected void BuildTree(TreeNode root, string[] routes)

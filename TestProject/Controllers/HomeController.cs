@@ -9,7 +9,7 @@ namespace TestProject.Controllers
 {
     public class HomeController : Controller
     {
-        private const string RequestUrl = @"http://localhost:50194/api/Values/?fields=Prop1,Prop3,Prop4&attr1=somevalue&attr2=somevalue2";
+        private const string RequestUrl = @"http://localhost:50194/api/Values/?fields=Prop1,Prop2.InnerProp2.Field1,Prop2.InnerProp2.Field2,Prop2.InnerProp3,Prop3.Field1.IntVal.Abc,Prop3.Field1.DoubleVal.Def,Prop3.Field1.DoubleVal.Hkl,Prop3.Field2,Prop4,Prop5&attr1=somevalue&attr2=somevalue2";
 
         public ActionResult Index()
         {

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Web.Http;
 using TestProject.Attributes;
+using TestProject.Helpers2;
 using TestProject.Models;
 
 namespace TestProject.Controllers
@@ -18,20 +19,22 @@ namespace TestProject.Controllers
 
         [FilterFields]
         [HttpGet]
-        public ObjectWithEnumerableInside FilterObjectProperties()
+        public IEnumerable<Root> FilterObjectProperties()
         {
-            var list = new List<ObjectWithManyProperties>();
-            for (var i = 0; i < 5; i++)
-            {
-                list.Add(BuildObject());
-            }
-            return new ObjectWithEnumerableInside
-            {
-                Prop1 = "SomeString", 
-                Prop2 = 10.5,
-                Prop3 = 6,
-                Prop4 = list
-            };
+            return Builder.GetInstance();
+
+            //var list = new List<ObjectWithManyProperties>();
+            //for (var i = 0; i < 5; i++)
+            //{
+            //    list.Add(BuildObject());
+            //}
+            //return new ObjectWithEnumerableInside
+            //{
+            //    Prop1 = "SomeString", 
+            //    Prop2 = 10.5,
+            //    Prop3 = 6,
+            //    Prop4 = list
+            //};
         }
 
         // GET api/values/5

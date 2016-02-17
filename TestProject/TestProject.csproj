@@ -126,10 +126,16 @@
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
+    <Compile Include="Helpers2\Stubs.cs" />
+    <Compile Include="Helpers2\TreeNode.cs" />
     <Compile Include="Helpers\SerializationFilterDecorator.cs" />
     <Compile Include="Helpers\CachableSerializationFilterDecorator.cs" />
     <Compile Include="Attributes\FilterPropertiesAttribute.cs" />
+    <Compile Include="Helpers\TreeSerializer.cs" />
+    <Compile Include="Models\FilterFieldsRequest.cs" />
     <Compile Include="Models\ObjectWithManyProperties.cs" />
+    <Compile Include="Models\ResponseTree.cs" />
+    <Compile Include="Models\TreeNode.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
