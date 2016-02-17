@@ -3,74 +3,130 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Web;
 using TestProject.Helpers2;
 
 namespace TestProject.Helpers
 {
     public class TreeSerializer
     {
-        public const char ParametersSeparator = ',';
-        public const char FieldsSeparator = '.';
+        public static object BuildFilteredObjectTree(object instance, Type returnInstanceType, IEnumerable<IEnumerable<string>> routes)
+        {
+            var rootType = GetUnderlyingTypeIfEnumerable(returnInstanceType) ?? returnInstanceType;
 
-        private readonly string _queryString =   "Prop1" + ParametersSeparator + 
-                        "Prop2.InnerProp1.Field1.Abc" + ParametersSeparator + 
-                        "Prop2.InnerProp1.Field2.Def" + ParametersSeparator + 
-                        "Prop2.InnerProp2.Field1" + ParametersSeparator + 
-                        "Prop2.InnerProp2.Field2" + ParametersSeparator + 
-                        "Prop2.InnerProp3" + ParametersSeparator + 
-                        "Prop3.Field1.IntVal.Abc" + ParametersSeparator + 
-                        "Prop3.Field1.DoubleVal.Def" + ParametersSeparator + 
-                        "Prop3.Field1.DoubleVal.Hkl" + ParametersSeparator + 
-                        "Prop3.Field2" + ParametersSeparator + 
-                        "Prop4" + ParametersSeparator + 
-                        "Prop5";
+            var enumerable = instance as IEnumerable;
+            if (enumerable == null)
+            {
+                return BuildNode("RootNode", routes, rootType, instance);
+            }
 
-        public static TreeNode BuildTree(string nodeKey, IEnumerable<IEnumerable<string>> routes, Type nodeType,
+            var list = new List<TreeNode>();
+            var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
+
+            foreach (var item in enumerable)
+            {
+                list.Add(BuildNode("RootNode", routesArray, rootType, item));
+            }
+
+            return list;
+        }
+
+        private static TreeNode BuildNode(string nodeKey, IEnumerable<IEnumerable<string>> routes, Type nodeType,
             object value)
         {
-            var underlyingType = nodeType.IsGenericType ? nodeType.GetGenericArguments()[0] : nodeType; // stub for enumerable
+            var underlyingType = GetUnderlyingTypeIfEnumerable(nodeType) ?? nodeType;
 
-            if (nodeType.IsGenericType)
+            if (underlyingType != nodeType)
             {
-                var enumerable = value as IEnumerable;
-                var listM = new List<TreeNode>();
                 var i = 0;
-                foreach (var node in enumerable)
+                var enumerableNodes = new List<TreeNode>();
+                var enumerable = value as IEnumerable;
+                if (enumerable != null)
                 {
-                    var list = new List<TreeNode>();
-                    var props = underlyingType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead).ToArray();
-
-                    foreach (var item in routes.GroupBy(e => e.First()))
+                    var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
+                    foreach (var item in enumerable)
                     {
-                        var prop = props.FirstOrDefault(p => p.Name == item.Key);
-                        if (prop == null)
-                            continue;
-                        var type = prop.GetGetMethod().ReturnType;
-                        var nodeNew = BuildTree(item.Key, item.Select(e => e.Skip(1)).Where(e => e.Any()), type, prop.GetValue(node));
-                        list.Add(nodeNew);
+                        var childNodesForEachEnumerableNode = new List<TreeNode>();
+                        var properties = underlyingType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead).ToArray();
+
+                        foreach (var routeProperty in routesArray.GroupBy(e => e.First()))
+                        {
+                            var propertyInfo = properties.FirstOrDefault(p => p.Name == routeProperty.Key);
+                            if (propertyInfo == null)
+                            {
+                                continue;
+                            }
+                            var propertyValue = propertyInfo.GetValue(item);
+                            if (propertyValue == null)
+                            {
+                                continue;
+                            }
+
+                            var propertyReturnType = propertyInfo.GetGetMethod().ReturnType;
+
+                            var childNode = BuildNode(routeProperty.Key, routeProperty.Select(e => e.Skip(1)).Where(e => e.Any()), propertyReturnType, propertyValue);
+
+                            childNodesForEachEnumerableNode.Add(childNode);
+                        }
+                        i++;
+
+                        enumerableNodes.Add(new TreeNode(nodeKey + "_" + i, childNodesForEachEnumerableNode, item));
                     }
-                    i++;
-                    listM.Add(new TreeNode(nodeKey + "_" + i, list, underlyingType, node));
+                    return new TreeNode(nodeKey, enumerableNodes, value, true);
                 }
-                return new TreeNode(nodeKey, listM, nodeType, value, true);
             }
             else
             {
-                var list = new List<TreeNode>();
-                var props = nodeType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead).ToArray();
+                var childNodes = new List<TreeNode>();
+                var propertyInfos = nodeType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead).ToArray();
                 foreach (var item in routes.GroupBy(e => e.First()))
                 {
-                    var prop = props.FirstOrDefault(p => p.Name == item.Key);
-                    if (prop == null)
+                    var propertyInfo = propertyInfos.FirstOrDefault(p => p.Name == item.Key);
+                    if (propertyInfo == null)
+                    {
                         continue;
-                    var type = prop.GetGetMethod().ReturnType;
-                    var node = BuildTree(item.Key, item.Select(e => e.Skip(1)).Where(e => e.Any()), type, prop.GetValue(value));
-                    list.Add(node);
+                    }
+                    var propertyValue = propertyInfo.GetValue(value);
+                    if (propertyValue == null)
+                    {
+                        continue;
+                    }
+                    var propertyReturnType = propertyInfo.GetGetMethod().ReturnType;
+
+                    var node = BuildNode(item.Key, item.Select(e => e.Skip(1)).Where(e => e.Any()), propertyReturnType, propertyValue);
+
+                    childNodes.Add(node);
                 }
-                return new TreeNode(nodeKey, list, nodeType, value);
+                return new TreeNode(nodeKey, childNodes, value);
             }
+
+            throw new Exception();
         }
+
+        protected static Type GetUnderlyingTypeIfEnumerable(Type type)
+        {
+            if (TypeOfIEnumerable.IsAssignableFrom(type))
+            {
+                var underlyingType = type.IsGenericType
+                    ? type.GetGenericArguments()[0]
+                    : TypeOfObject;
+
+                return underlyingType;
+            }
+            return null;
+        }
+
+        #region Static constructor and fields
+
+        static TreeSerializer()
+        {
+            TypeOfIEnumerable = typeof(IEnumerable);
+            TypeOfObject = typeof(object);
+        }
+
+        private static readonly Type TypeOfObject;
+        private static readonly Type TypeOfIEnumerable;
+
+        #endregion
 
 
     }

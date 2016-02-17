@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
-using DecoratorBase = TestProject.Helpers.SerializationFilterDecorator.DecoratorBase;
 
 namespace TestProject.Helpers2
 {
@@ -10,7 +9,7 @@ namespace TestProject.Helpers2
     {
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
-            if (isChildsEnumerable)
+            if (_isChildsEnumerable)
             {
                 var list = new List<object>();
                 if (_childNodes.Count != 0)
@@ -36,7 +35,7 @@ namespace TestProject.Helpers2
                     }
                     else
                     {
-                        if (item.Value.isChildsEnumerable)
+                        if (item.Value._isChildsEnumerable)
                         {
                             var list = new List<object>();
                             foreach (var node in item.Value._childNodes)
@@ -61,13 +60,12 @@ namespace TestProject.Helpers2
             }
         }
 
-        public bool isChildsEnumerable;
-        public readonly string _key;
-        public Type _decoratedType;
-        public object _decoratedValue;
-        public readonly Dictionary<string, TreeNode> _childNodes;
+        private readonly bool _isChildsEnumerable;
+        private readonly string _key;
+        private readonly object _decoratedValue;
+        private readonly Dictionary<string, TreeNode> _childNodes;
 
-        public TreeNode(string key, List<TreeNode> childNodes, Type nodeType, object nodeValue)
+        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue)
         {
             var uniqueChilds = childNodes.Distinct().ToArray();
             if (uniqueChilds.Length != childNodes.Count)
@@ -77,11 +75,10 @@ namespace TestProject.Helpers2
 
             _key = key;
             _childNodes = uniqueChilds.ToDictionary(child => child._key, child => child);
-            _decoratedType = nodeType;
             _decoratedValue = nodeValue;
         }
 
-        public TreeNode(string key, List<TreeNode> childNodes, Type nodeType, object nodeValue, bool isEnumerable)
+        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue, bool isEnumerable)
         {
             var uniqueChilds = childNodes.Distinct().ToArray();
             if (uniqueChilds.Length != childNodes.Count)
@@ -91,9 +88,8 @@ namespace TestProject.Helpers2
 
             _key = key;
             _childNodes = uniqueChilds.ToDictionary(child => child._key, child => child);
-            _decoratedType = nodeType;
             _decoratedValue = nodeValue;
-            isChildsEnumerable = isEnumerable;
+            _isChildsEnumerable = isEnumerable;
         }
 
         public override bool Equals(object obj)
@@ -117,8 +113,7 @@ namespace TestProject.Helpers2
 
         protected bool EqualsInner(TreeNode other)
         {
-            return false;
-            //return (other != null) && (ReferenceEquals(this, other) || string.Equals(_key, other._key));
+            return (other != null) && (ReferenceEquals(this, other) || string.Equals(_key, other._key));
         }
     }
 }

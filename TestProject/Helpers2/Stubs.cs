@@ -7,6 +7,7 @@ namespace TestProject.Helpers2
     public static class Builder
     {
         private static Root instance;
+        private static List<Root> enumerableInstance;
 
         static Builder()
         {
@@ -44,17 +45,24 @@ namespace TestProject.Helpers2
             var class5 = new Class5 { Class5Double = 9898.11111, Class5Int = 88888, Class5String = "SomeString" };
 
             instance = new Root { Prop1 = class1list, Prop2 = class2list, Prop3 = class3, Prop4 = class4, Prop5 = class5 };
-        }
 
-        public static IEnumerable<Root> GetInstance()
-        {
             var list = new List<Root>();
             for (var i = 0; i < 20; i++)
             {
                 instance.Prop4.Class4Double = i;
                 list.Add(instance);
             }
-            return list;
+            enumerableInstance = list;
+        }
+
+        public static Root GetInstance()
+        {
+            return instance;
+        }
+
+        public static IEnumerable<Root> GetEnumerableInstance()
+        {
+            return enumerableInstance;
         }
     }
 
