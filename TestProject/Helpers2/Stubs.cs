@@ -1,5 +1,6 @@
 ﻿// ReSharper Disable All
 
+using System;
 using System.Collections.Generic;
 
 namespace TestProject.Helpers2
@@ -7,6 +8,7 @@ namespace TestProject.Helpers2
     public static class Builder
     {
         private static Root instance;
+        private static Root1 instance1;
         private static List<Root> enumerableInstance;
 
         static Builder()
@@ -53,11 +55,25 @@ namespace TestProject.Helpers2
                 list.Add(instance);
             }
             enumerableInstance = list;
+
+            var list1 = new List<Class5>();
+            var count = new Random().Next(5000);
+            for (var i = 0; i < count; i++)
+            {
+                list1.Add(new Class5() { Class5Double = (double)i / 3, Class5Int = i, Class5String = "SomeString_" + i });
+            }
+
+            instance1 = new Root1() { Count = list1.Count, Name = "ObjectName", Id = 542, Items = list1 };
         }
 
         public static Root GetInstance()
         {
             return instance;
+        }
+
+        public static Root1 GetInstance2()
+        {
+            return instance1;
         }
 
         public static IEnumerable<Root> GetEnumerableInstance()
@@ -73,6 +89,14 @@ namespace TestProject.Helpers2
         public Class3 Prop3 { get; set; }
         public Class4 Prop4 { get; set; }
         public Class5 Prop5 { get; set; }
+    }
+
+    public class Root1
+    {
+        public int Count { get; set; }
+        public string Name { get; set; }
+        public int Id { get; set; }
+        public IEnumerable<Class5> Items { get; set; }
     }
 
     public class Class1

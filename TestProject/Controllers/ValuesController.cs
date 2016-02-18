@@ -17,11 +17,19 @@ namespace TestProject.Controllers
         //    return ret;
         //}
 
+        //[FilterFields]
+        //[HttpGet]
+        //public IEnumerable<Root> FilterObjectProperties()
+        //{
+        //    return Builder.GetEnumerableInstance();
+        //}
+
         [FilterFields]
         [HttpGet]
-        public IEnumerable<Root> FilterObjectProperties()
+        public Root1 FilterObjectProperties()
         {
-            return Builder.GetEnumerableInstance();
+            return Builder.GetInstance2();
         }
     }
 }
+

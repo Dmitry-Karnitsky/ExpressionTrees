@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
-using DecoratorBase = TestProject.Helpers.SerializationFilterDecorator.DecoratorBase;
 
 namespace TestProject.Models
 {
@@ -13,8 +12,6 @@ namespace TestProject.Models
         private readonly Dictionary<string, TreeNode> _childNodes;
 
         private Type _decoratedType;
-        private object _decoratedInstance;
-        private DecoratorBase _decorator;
 
         public TreeNode(string key)
             : this(key, new List<TreeNode>(), null)
@@ -86,40 +83,7 @@ namespace TestProject.Models
 
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
-            if (_childNodes.Count == 0)
-            {
-                //var enumerable = _decoratedInstance as IEnumerable;
-                //if (enumerable != null)
-                //{
-                //    var list = new List<Dictionary<string, object>>();
-                //    foreach (var item in enumerable)
-                //    {
-                //        var props = item.GetType().GetProperties();
-                //        var dict = props.ToDictionary(prop => prop.Name, prop => prop.GetValue(item));
-                //        list.Add(dict);
-                //    }
-                //    info.AddValue(_key, list, typeof(IEnumerable<KeyValuePair<string, object>>));
-                //}
-                //else
-                //{
-                //    var props = _decoratedInstance.GetType().GetProperties();
-                //    foreach (var prop in props)
-                //    {
-                //        info.AddValue(prop.Name, prop.GetValue(_decoratedInstance));
-                //    }
-                //}
-            }
-            else
-            {
-                if (_decoratedInstance != null)
-                {
-                    foreach (var node in _childNodes)
-                    {
-                        info.AddValue(node.Key, node.Value._childNodes.Count == 0 ? node.Value._decoratedInstance : node.Value);
-                    }
-                }
-                info.AddValue(_key, null);
-            }
+            
         }
 
         protected void FillSerializationInfo(SerializationInfo info)

@@ -9,110 +9,121 @@ namespace TestProject.Helpers
 {
     public class TreeSerializer
     {
-        public static object BuildFilteredObjectTree(object instance, Type returnInstanceType, IEnumerable<IEnumerable<string>> routes)
+        public static object BuildFilteredObjectTree(object instance, Type instanceType, IEnumerable<IEnumerable<string>> routes, out Type filteredObjectType)
         {
-            var rootType = GetUnderlyingTypeIfEnumerable(returnInstanceType) ?? returnInstanceType;
+            if (instanceType == null)
+                throw new ArgumentNullException("instanceType");
+            if (routes == null)
+                throw new ArgumentNullException("routes");
 
-            var enumerable = instance as IEnumerable;
-            if (enumerable == null)
+            if (instance == null)
             {
-                return BuildNode("RootNode", routes, rootType, instance);
+                filteredObjectType = instanceType;
+                return null;
+            }
+
+            Type underlyingType;
+            var isReturnTypeEnumerable = TryGetUnderlyingTypeIfEnumerable(instanceType, out underlyingType);
+
+            if (!isReturnTypeEnumerable)
+            {
+                filteredObjectType = TypeOfTreeNode;
+                return BuildNode("RootNode", routes, instanceType, instance);
             }
 
             var list = new List<TreeNode>();
             var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
 
-            foreach (var item in enumerable)
+            var enumerable = instance as IEnumerable;
+            if (enumerable != null)
             {
-                list.Add(BuildNode("RootNode", routesArray, rootType, item));
+                foreach (var item in enumerable)
+                {
+                    list.Add(BuildNode("RootNode", routesArray, underlyingType, item));
+                }
+
+                filteredObjectType = TypeOfTreeNodesList;
+                return list;
             }
 
-            return list;
+            throw new InvalidCastException("Type of instance was IEnumerable but instance was not.");
         }
 
-        private static TreeNode BuildNode(string nodeKey, IEnumerable<IEnumerable<string>> routes, Type nodeType,
-            object value)
+        private static TreeNode BuildNode(string nodeKey, IEnumerable<IEnumerable<string>> routes, Type nodeType, object value)
         {
-            var underlyingType = GetUnderlyingTypeIfEnumerable(nodeType) ?? nodeType;
+            Type underlyingType;
+            var isReturnTypeEnumerable = TryGetUnderlyingTypeIfEnumerable(nodeType, out underlyingType);
 
-            if (underlyingType != nodeType)
+            if (isReturnTypeEnumerable)
             {
-                var i = 0;
-                var enumerableNodes = new List<TreeNode>();
                 var enumerable = value as IEnumerable;
                 if (enumerable != null)
                 {
+                    var i = 0;
+                    var enumerableNodes = new List<TreeNode>();
                     var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
                     foreach (var item in enumerable)
                     {
-                        var childNodesForEachEnumerableNode = new List<TreeNode>();
-                        var properties = underlyingType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead).ToArray();
-
-                        foreach (var routeProperty in routesArray.GroupBy(e => e.First()))
-                        {
-                            var propertyInfo = properties.FirstOrDefault(p => p.Name == routeProperty.Key);
-                            if (propertyInfo == null)
-                            {
-                                continue;
-                            }
-                            var propertyValue = propertyInfo.GetValue(item);
-                            if (propertyValue == null)
-                            {
-                                continue;
-                            }
-
-                            var propertyReturnType = propertyInfo.GetGetMethod().ReturnType;
-
-                            var childNode = BuildNode(routeProperty.Key, routeProperty.Select(e => e.Skip(1)).Where(e => e.Any()), propertyReturnType, propertyValue);
-
-                            childNodesForEachEnumerableNode.Add(childNode);
-                        }
+                        var childNodesForEachEnumerableNode = GetChildNodes(underlyingType, item, routesArray);
+                        enumerableNodes.Add(new TreeNode(nodeKey + i, childNodesForEachEnumerableNode, item));
                         i++;
-
-                        enumerableNodes.Add(new TreeNode(nodeKey + "_" + i, childNodesForEachEnumerableNode, item));
                     }
                     return new TreeNode(nodeKey, enumerableNodes, value, true);
                 }
             }
             else
             {
-                var childNodes = new List<TreeNode>();
-                var propertyInfos = nodeType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead).ToArray();
-                foreach (var item in routes.GroupBy(e => e.First()))
-                {
-                    var propertyInfo = propertyInfos.FirstOrDefault(p => p.Name == item.Key);
-                    if (propertyInfo == null)
-                    {
-                        continue;
-                    }
-                    var propertyValue = propertyInfo.GetValue(value);
-                    if (propertyValue == null)
-                    {
-                        continue;
-                    }
-                    var propertyReturnType = propertyInfo.GetGetMethod().ReturnType;
-
-                    var node = BuildNode(item.Key, item.Select(e => e.Skip(1)).Where(e => e.Any()), propertyReturnType, propertyValue);
-
-                    childNodes.Add(node);
-                }
+                var childNodes = GetChildNodes(nodeType, value, routes);
                 return new TreeNode(nodeKey, childNodes, value);
             }
 
             throw new Exception();
         }
 
-        protected static Type GetUnderlyingTypeIfEnumerable(Type type)
+        private static List<TreeNode> GetChildNodes(Type nodeType, object value, IEnumerable<IEnumerable<string>> routes)
         {
-            if (TypeOfIEnumerable.IsAssignableFrom(type))
+            var childNodes = new List<TreeNode>();
+            if (value == null)
             {
-                var underlyingType = type.IsGenericType
+                return childNodes;
+            }
+            var propertyInfos = nodeType.GetProperties(BindingFlags.Public | BindingFlags.Instance).ToDictionary(p => p.Name, p => p);
+            foreach (var item in routes.GroupBy(e => e.First()))
+            {
+                PropertyInfo propertyInfo;
+                if (!propertyInfos.TryGetValue(item.Key, out propertyInfo))
+                {
+                    continue;
+                }
+
+                var getter = propertyInfo.GetGetMethod(false);
+                if (getter == null || getter.GetParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                var propertyValue = getter.Invoke(value, null);
+                var propertyReturnType = getter.ReturnType;
+
+                var node = BuildNode(item.Key, item.Select(e => e.Skip(1)).Where(e => e.Any()), propertyReturnType, propertyValue);
+                childNodes.Add(node);
+            }
+            return childNodes;
+        }
+
+        private static bool TryGetUnderlyingTypeIfEnumerable(Type type, out Type underlyingType)
+        {
+            if (type.IsGenericType && TypeOfIEnumerable.IsAssignableFrom(type))
+            {
+                underlyingType = type.IsGenericType
                     ? type.GetGenericArguments()[0]
                     : TypeOfObject;
 
-                return underlyingType;
+                return true;
             }
-            return null;
+
+            underlyingType = null;
+            return false;
         }
 
         #region Static constructor and fields
@@ -121,13 +132,15 @@ namespace TestProject.Helpers
         {
             TypeOfIEnumerable = typeof(IEnumerable);
             TypeOfObject = typeof(object);
+            TypeOfTreeNode = typeof(TreeNode);
+            TypeOfTreeNodesList = typeof(List<TreeNode>);
         }
 
         private static readonly Type TypeOfObject;
         private static readonly Type TypeOfIEnumerable;
+        private static readonly Type TypeOfTreeNodesList;
+        private static readonly Type TypeOfTreeNode;
 
         #endregion
-
-
     }
 }

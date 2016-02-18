@@ -2,11 +2,36 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using Microsoft.Ajax.Utilities;
 
 namespace TestProject.Helpers2
 {
     public class TreeNode : IEquatable<TreeNode>, ISerializable
     {
+        private readonly bool _isChildsEnumerable;
+        private readonly string _key;
+        private readonly object _decoratedValue;
+        private readonly Dictionary<string, TreeNode> _childNodes;
+
+        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue)
+            :this (key, childNodes, nodeValue, false)
+        {
+        }
+
+        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue, bool isEnumerable)
+        {
+            var uniqueChilds = childNodes.Distinct().ToArray();
+            if (uniqueChilds.Length != childNodes.Count)
+            {
+                throw new ArgumentException("Child nodes keys was not unique.", "childNodes");
+            }
+
+            _key = key;
+            _childNodes = uniqueChilds.ToDictionary(child => child._key, child => child);
+            _decoratedValue = nodeValue;
+            _isChildsEnumerable = isEnumerable;
+        }
+
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
             if (_isChildsEnumerable)
@@ -40,14 +65,7 @@ namespace TestProject.Helpers2
                             var list = new List<object>();
                             foreach (var node in item.Value._childNodes)
                             {
-                                if (node.Value._childNodes.Count != 0)
-                                {
-                                    list.Add(node.Value);
-                                }
-                                else
-                                {
-                                    list.Add(node.Value._decoratedValue);
-                                }
+                                list.Add(node.Value._childNodes.Count != 0 ? node.Value : node.Value._decoratedValue);
                             }
                             info.AddValue(item.Key, list.ToArray());
                         }
@@ -60,37 +78,7 @@ namespace TestProject.Helpers2
             }
         }
 
-        private readonly bool _isChildsEnumerable;
-        private readonly string _key;
-        private readonly object _decoratedValue;
-        private readonly Dictionary<string, TreeNode> _childNodes;
-
-        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue)
-        {
-            var uniqueChilds = childNodes.Distinct().ToArray();
-            if (uniqueChilds.Length != childNodes.Count)
-            {
-                throw new ArgumentException("Child nodes keys was not unique.", "childNodes");
-            }
-
-            _key = key;
-            _childNodes = uniqueChilds.ToDictionary(child => child._key, child => child);
-            _decoratedValue = nodeValue;
-        }
-
-        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue, bool isEnumerable)
-        {
-            var uniqueChilds = childNodes.Distinct().ToArray();
-            if (uniqueChilds.Length != childNodes.Count)
-            {
-                throw new ArgumentException("Child nodes keys was not unique.", "childNodes");
-            }
-
-            _key = key;
-            _childNodes = uniqueChilds.ToDictionary(child => child._key, child => child);
-            _decoratedValue = nodeValue;
-            _isChildsEnumerable = isEnumerable;
-        }
+        #region Equals and GetHashCode implementation
 
         public override bool Equals(object obj)
         {
@@ -115,5 +103,8 @@ namespace TestProject.Helpers2
         {
             return (other != null) && (ReferenceEquals(this, other) || string.Equals(_key, other._key));
         }
+
+        #endregion
+
     }
 }
