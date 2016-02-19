@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Web;
 using System.Web.Http.Filters;
 using TestProject.Helpers;
@@ -50,7 +51,8 @@ namespace TestProject.Attributes
                 stopwatch.Start();
                 var newContent = TreeSerializer.BuildFilteredObjectTree(instance, instanceType, routes, out newContentType);
                 stopwatch.Stop();
-                actionExecutedContext.Response.Content = new ObjectContent(newContentType, newContent, content.Formatter);
+                //actionExecutedContext.Response.Content = new ObjectContent(newContentType, newContent, content.Formatter);
+                content.Value = newContent;
             }
         }
     }

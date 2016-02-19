@@ -57,7 +57,7 @@ namespace TestProject.Helpers2
             enumerableInstance = list;
 
             var list1 = new List<Class5>();
-            var count = new Random().Next(5000);
+            var count = 2500; //new Random().Next(5000);
             for (var i = 0; i < count; i++)
             {
                 list1.Add(new Class5() { Class5Double = (double)i / 3, Class5Int = i, Class5String = "SomeString_" + i });

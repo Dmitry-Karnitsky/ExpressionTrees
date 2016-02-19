@@ -31,22 +31,48 @@ namespace TestProject.Helpers
                 return BuildNode("RootNode", routes, instanceType, instance);
             }
 
-            var list = new List<TreeNode>();
+            var array = GetRootArray(instance, routes, underlyingType);
+
+            if (array != null)
+            {
+                filteredObjectType = TypeOfTreeNodesArray;
+                return array;
+            }
+
+            throw new InvalidCastException("Type of instance was IEnumerable but instance was not.");
+        }
+
+        private static TreeNode[] GetRootArray(object instance, IEnumerable<IEnumerable<string>> routes, Type underlyingType)
+        {
             var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
+
+            var list = instance as IList;
+            if (list != null)
+            {
+                var count = list.Count;
+                var items = new TreeNode[count];
+                for (var i = 0; i < count; i++)
+                {
+                    items[i] = BuildNode("RootNode", routesArray, underlyingType, list[i]);
+                }
+                return items;
+            }
 
             var enumerable = instance as IEnumerable;
             if (enumerable != null)
             {
+                var collection = instance as ICollection;
+                var items = collection != null ? new List<TreeNode>(collection.Count) : new List<TreeNode>();
+
                 foreach (var item in enumerable)
                 {
-                    list.Add(BuildNode("RootNode", routesArray, underlyingType, item));
+                    items.Add(BuildNode("RootNode", routesArray, underlyingType, item));
                 }
 
-                filteredObjectType = TypeOfTreeNodesList;
-                return list;
+                return items.ToArray();
             }
 
-            throw new InvalidCastException("Type of instance was IEnumerable but instance was not.");
+            return null;
         }
 
         private static TreeNode BuildNode(string nodeKey, IEnumerable<IEnumerable<string>> routes, Type nodeType, object value)
@@ -56,12 +82,26 @@ namespace TestProject.Helpers
 
             if (isReturnTypeEnumerable)
             {
+                var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
+                var list = value as IList;
+                if (list != null)
+                {
+                    var count = list.Count;
+                    var enumerableNodes = new TreeNode[count];
+                    
+                    for (var i = 0; i < count; i++)
+                    {
+                        var childNodesForEachEnumerableNode = GetChildNodes(underlyingType, list[i], routesArray);
+                        enumerableNodes[i] = new TreeNode(nodeKey + i, childNodesForEachEnumerableNode, list[i]);
+                    }
+                    return new TreeNode(nodeKey, enumerableNodes, value, true);
+                }
                 var enumerable = value as IEnumerable;
                 if (enumerable != null)
                 {
+                    var collection = value as ICollection;
                     var i = 0;
-                    var enumerableNodes = new List<TreeNode>();
-                    var routesArray = routes as IEnumerable<string>[] ?? routes.ToArray();
+                    var enumerableNodes = collection != null ? new List<TreeNode>(collection.Count) : new List<TreeNode>();
                     foreach (var item in enumerable)
                     {
                         var childNodesForEachEnumerableNode = GetChildNodes(underlyingType, item, routesArray);
@@ -133,12 +173,12 @@ namespace TestProject.Helpers
             TypeOfIEnumerable = typeof(IEnumerable);
             TypeOfObject = typeof(object);
             TypeOfTreeNode = typeof(TreeNode);
-            TypeOfTreeNodesList = typeof(List<TreeNode>);
+            TypeOfTreeNodesArray = typeof(TreeNode[]);
         }
 
         private static readonly Type TypeOfObject;
         private static readonly Type TypeOfIEnumerable;
-        private static readonly Type TypeOfTreeNodesList;
+        private static readonly Type TypeOfTreeNodesArray;
         private static readonly Type TypeOfTreeNode;
 
         #endregion

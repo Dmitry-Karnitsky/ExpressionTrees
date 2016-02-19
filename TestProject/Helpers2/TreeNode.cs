@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
-using Microsoft.Ajax.Utilities;
 
 namespace TestProject.Helpers2
 {
@@ -13,12 +12,12 @@ namespace TestProject.Helpers2
         private readonly object _decoratedValue;
         private readonly Dictionary<string, TreeNode> _childNodes;
 
-        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue)
+        public TreeNode(string key, IList<TreeNode> childNodes, object nodeValue)
             :this (key, childNodes, nodeValue, false)
         {
         }
 
-        public TreeNode(string key, List<TreeNode> childNodes, object nodeValue, bool isEnumerable)
+        public TreeNode(string key, IList<TreeNode> childNodes, object nodeValue, bool isEnumerable)
         {
             var uniqueChilds = childNodes.Distinct().ToArray();
             if (uniqueChilds.Length != childNodes.Count)
@@ -36,19 +35,7 @@ namespace TestProject.Helpers2
         {
             if (_isChildsEnumerable)
             {
-                var list = new List<object>();
-                if (_childNodes.Count != 0)
-                {
-                    foreach (var item in _childNodes)
-                    {
-                        list.Add(item.Value);
-                    }
-                    info.AddValue(_key, list);
-                }
-                else
-                {
-                    info.AddValue(_key, _decoratedValue);
-                }
+                info.AddValue(_key, _childNodes.Count != 0 ? _childNodes.Values : _decoratedValue);
             }
             else
             {
@@ -62,12 +49,26 @@ namespace TestProject.Helpers2
                     {
                         if (item.Value._isChildsEnumerable)
                         {
-                            var list = new List<object>();
-                            foreach (var node in item.Value._childNodes)
+                            var count = item.Value._childNodes.Values.Count;
+                            var nodes = item.Value._childNodes.Values;
+
+                            var list = new List<object>(count);
+                            foreach (var node in nodes)
                             {
-                                list.Add(node.Value._childNodes.Count != 0 ? node.Value : node.Value._decoratedValue);
+                                list.Add(node._childNodes.Count != 0 ? node : node._decoratedValue);
                             }
-                            info.AddValue(item.Key, list.ToArray());
+                            info.AddValue(item.Key, list);
+
+                            //var count = item.Value._childNodes.Values.Count;
+                            //var nodes = new TreeNode[count];
+                            //item.Value._childNodes.Values.CopyTo(nodes, 0);
+
+                            //var valuesToSerialize = new object[count];
+                            //for (var i = 0; i < count; i++)
+                            //{
+                            //    valuesToSerialize[i] = nodes[i]._childNodes.Count != 0 ? nodes[i] : nodes[i]._decoratedValue;
+                            //}
+                            //info.AddValue(item.Key, valuesToSerialize);
                         }
                         else
                         {
